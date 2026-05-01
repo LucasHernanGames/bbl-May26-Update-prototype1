@@ -694,6 +694,12 @@ export default function YourPhrasesFlow() {
     shadow: true,
     recall: true,
   });
+
+  // Lifetime Recall reps drive the belt level. State so dev scenarios can override
+  // (e.g. fresh user = 0 → White Belt L1; bonus mode = 1670 → Yellow Belt L7).
+  const [recallReps, setRecallReps] = useState(1670);
+  const [hasFinishedFirstSession, setHasFinishedFirstSession] = useState(true);
+
   // Each module has:
   // - `unit`: the thing the user produces (phrases / words / reps)
   // - `dailyQuota`: how many of that unit completes today's module
@@ -712,6 +718,9 @@ export default function YourPhrasesFlow() {
     { id: "recall",        label: "Recall",        sub: "Review your phrases",        icon: "⭐", color: "#4DA5D9", colorLight: "#7BCCE4",
       unit: "reps",    dailyQuota: 100, dailyDone: 0,  lifetime: 1670, lifetimeTarget: 100000 },
   ];
+  // Override Recall's lifetime with the live state value so the home-screen belt
+  // info and the choose-training Recall card stay in sync. (Demo wiring.)
+  dailyModules[dailyModules.length - 1].lifetime = recallReps;
   // In the demo: if a module is marked complete, show its dailyDone at the quota.
   // In production this would come from the backend session counters.
   const dailyModulesWithProgress = dailyModules.map((m) => ({
@@ -785,13 +794,8 @@ export default function YourPhrasesFlow() {
     };
   };
 
-  // Demo: user has 1,670 lifetime Recall reps → Yellow Belt, Level 7 area
-  // (bonus-mode demo shows them well into progression)
-  const [hasFinishedFirstSession, setHasFinishedFirstSession] = useState(true);
-  const beltInfo = computeBeltProgress(
-    dailyModules.find((m) => m.id === "recall")?.lifetime || 0,
-    hasFinishedFirstSession
-  );
+  // Compute belt info from current Recall reps + first-session flag
+  const beltInfo = computeBeltProgress(recallReps, hasFinishedFirstSession);
 
   // --- Daily quota for the "Your Phrases" module ---
   // In production these would come from user prefs + today's saved progress.
@@ -1199,6 +1203,46 @@ export default function YourPhrasesFlow() {
   };
 
   // Handler for module selection on Choose Training screen (bonus mode)
+  // Centralized back-navigation. Each screen's "back" goes to the most natural
+  // previous screen. Allows ← / ✕ buttons throughout the app to work correctly.
+  const goBack = () => {
+    switch (screen) {
+      case "topic":
+        // From topic select, go back to start screen
+        setScreen("start");
+        break;
+      case "start":
+        // From the Wake Up Puffling screen, exit the module back to home
+        setScreen("home");
+        break;
+      case "startHereCategory":
+        // Back to topic select
+        setScreen("topic");
+        break;
+      case "startHereFill":
+        // Back to category list
+        setScreen("startHereCategory");
+        break;
+      case "info":
+      case "phrase":
+      case "transition":
+        // From inside a question session, exit back to topic select
+        // (in production this should probably show a confirm dialog
+        // since it loses session progress — flag for dev)
+        setScreen("topic");
+        break;
+      case "finish":
+        // From finish screen back to home
+        setScreen("home");
+        break;
+      case "chooseTraining":
+        setScreen("home");
+        break;
+      default:
+        setScreen("home");
+    }
+  };
+
   const selectModule = (moduleId) => {
     if (moduleId === "phrases") {
       // Enter the Your Phrases flow — in bonus mode this is extra practice
@@ -1215,7 +1259,10 @@ export default function YourPhrasesFlow() {
   // Two scenario toggles let the dev preview the app at different lifecycle points
   // without having to actually grind through the flow.
 
-  // FRESH USER — brand new, no belt, sleeping Puffling, 0/5 modules, Start Here untouched
+  // FRESH USER — brand new, sleeping Puffling, 0/5 modules, Start Here untouched.
+  // Note: hasFinishedFirstSession stays TRUE so belt level still shows (per Tony's request,
+  // to keep the demo state consistent for the dev). The "no belt yet" state can be tested
+  // separately later if needed.
   const devFreshUser = () => {
     setScreen("home");
     setTopic(null);
@@ -1228,7 +1275,8 @@ export default function YourPhrasesFlow() {
     setSessionStartDaily(0);
     setStartHereCategoryIdx(null);
     setModulesComplete({ phrases: false, fiveK: false, pronunciation: false, shadow: false, recall: false });
-    setHasFinishedFirstSession(false);
+    setHasFinishedFirstSession(true);
+    setRecallReps(0);
     setPhrasesByTopic({ startHere: 0, about: 0, travel: 0, family: 0, food: 0, hobbies: 0, love: 0, chats: 0 });
   };
 
@@ -1246,6 +1294,7 @@ export default function YourPhrasesFlow() {
     setStartHereCategoryIdx(null);
     setModulesComplete({ phrases: true, fiveK: false, pronunciation: false, shadow: false, recall: false });
     setHasFinishedFirstSession(true);
+    setRecallReps(0);
     setPhrasesByTopic({ startHere: 30, about: 0, travel: 0, family: 0, food: 0, hobbies: 0, love: 0, chats: 0 });
   };
 
@@ -1263,6 +1312,7 @@ export default function YourPhrasesFlow() {
     setStartHereCategoryIdx(null);
     setModulesComplete({ phrases: true, fiveK: true, pronunciation: true, shadow: true, recall: true });
     setHasFinishedFirstSession(true);
+    setRecallReps(1670);
     setPhrasesByTopic({ startHere: 50, about: 24, travel: 0, family: 0, food: 0, hobbies: 0, love: 0, chats: 0 });
   };
 
@@ -1279,7 +1329,8 @@ export default function YourPhrasesFlow() {
     setSessionStartDaily(0);
     setStartHereCategoryIdx(null);
     setModulesComplete({ phrases: false, fiveK: false, pronunciation: false, shadow: false, recall: false });
-    setHasFinishedFirstSession(false);
+    setHasFinishedFirstSession(true);
+    setRecallReps(0);
     setPhrasesByTopic({ startHere: 0, about: 0, travel: 0, family: 0, food: 0, hobbies: 0, love: 0, chats: 0 });
   };
 
@@ -1297,6 +1348,7 @@ export default function YourPhrasesFlow() {
     setStartHereCategoryIdx(null);
     setModulesComplete({ phrases: true, fiveK: false, pronunciation: false, shadow: false, recall: false });
     setHasFinishedFirstSession(true);
+    setRecallReps(0);
     setPhrasesByTopic({ startHere: 50, about: 0, travel: 0, family: 0, food: 0, hobbies: 0, love: 0, chats: 0 });
   };
 
@@ -1314,6 +1366,7 @@ export default function YourPhrasesFlow() {
     setStartHereCategoryIdx(null);
     setModulesComplete({ phrases: true, fiveK: true, pronunciation: true, shadow: true, recall: true });
     setHasFinishedFirstSession(true);
+    setRecallReps(1670);
     setPhrasesByTopic({ startHere: 50, about: 24, travel: 22, family: 20, food: 20, hobbies: 20, love: 20, chats: 0 });
   };
 
@@ -1517,7 +1570,7 @@ export default function YourPhrasesFlow() {
               onBack={() => setScreen("home")}
             />
           )}
-          {screen === "start"      && <StartScreen onStart={() => setScreen("topic")} isBonus={allModulesDone} />}
+          {screen === "start"      && <StartScreen onStart={() => setScreen("topic")} isBonus={allModulesDone} onBack={goBack} />}
           {screen === "topic"      && (
             <TopicScreen
               topics={topics}
@@ -1528,6 +1581,7 @@ export default function YourPhrasesFlow() {
               phrasesNeededToUnlock={phrasesNeededToUnlock}
               phrasesByTopic={phrasesByTopic}
               isBonus={allModulesDone}
+              onBack={goBack}
             />
           )}
           {screen === "startHereCategory" && (
@@ -1550,6 +1604,7 @@ export default function YourPhrasesFlow() {
               onNext={advanceStartHere}
               pufflingState={pufflingState}
               reps={reps}
+              onBack={goBack}
             />
           )}
           {(screen === "info" || screen === "phrase") && currentQ && (
@@ -1565,6 +1620,7 @@ export default function YourPhrasesFlow() {
               topicLabel={topic?.label}
               pufflingState={pufflingState}
               reps={reps}
+              onBack={goBack}
             />
           )}
           {screen === "transition" && <TransitionScreen topicLabel={topic?.label} dailyDone={dailyDone} dailyGoal={dailyGoal} onContinue={startPhrases} />}
@@ -1838,11 +1894,7 @@ const HomeScreen = ({
         <div
           className="relative rounded-3xl slide-up"
           style={{
-            background: allModulesDone
-              ? "linear-gradient(180deg, #FFE89A 0%, #FFD47A 100%)"
-              : completedCount >= 3
-              ? "linear-gradient(180deg, #FFF4D0 0%, #FFE89A 100%)"
-              : "linear-gradient(180deg, #FFF8E8 0%, #FFF1D0 100%)",
+            background: "linear-gradient(180deg, #FFE89A 0%, #FFD47A 100%)",
             boxShadow: "0 4px 0 rgba(0,0,0,0.08), inset 0 0 0 2px rgba(255,255,255,0.4)",
             animationDelay: "300ms",
             transition: "background 800ms ease-out",
@@ -2030,13 +2082,26 @@ const HomeScreen = ({
           }}
         >
           {[
-            { label: "Puffling", icon: "🐣", active: true },
+            { label: "Puffling", image: "/puffling.png", active: true },
             { label: "Phrasebook", icon: "📖" },
             { label: "Social", icon: "💬" },
             { label: "Progress", icon: "📊" },
           ].map((tab) => (
             <div key={tab.label} className="flex flex-col items-center gap-0.5">
-              <span style={{ fontSize: 17, opacity: tab.active ? 1 : 0.55 }}>{tab.icon}</span>
+              {tab.image ? (
+                <img
+                  src={tab.image}
+                  alt={tab.label}
+                  style={{
+                    width: 22,
+                    height: 22,
+                    objectFit: "contain",
+                    opacity: tab.active ? 1 : 0.55,
+                  }}
+                />
+              ) : (
+                <span style={{ fontSize: 17, opacity: tab.active ? 1 : 0.55 }}>{tab.icon}</span>
+              )}
               <span className="font-display font-semibold" style={{ fontSize: 9, color: tab.active ? "#0A4A38" : "rgba(10,74,56,0.55)" }}>{tab.label}</span>
             </div>
           ))}
@@ -2301,7 +2366,7 @@ const ChooseTrainingScreen = ({ modules, modulesComplete, currentModuleIdx, allM
 /* ============================================================
    SCREEN 1 — START / "Wake Up Your Puffling"
    ============================================================ */
-const StartScreen = ({ onStart, isBonus = false }) => {
+const StartScreen = ({ onStart, isBonus = false, onBack = () => {} }) => {
   const phrases = ["Hello", "Buenos días", "¿Cómo estás?", "Bonjour", "こんにちは"];
   return (
     <div className="relative w-full h-full">
@@ -2317,7 +2382,7 @@ const StartScreen = ({ onStart, isBonus = false }) => {
             <div className="px-3 py-1.5 rounded-full font-display font-semibold text-xs" style={{ background: "rgba(255,255,255,0.7)", color: "#1F4A5C", backdropFilter: "blur(8px)" }}>
               {isBonus ? "🎉 BONUS PRACTICE" : "MODULE 1 OF 5"}
             </div>
-            <button className="w-9 h-9 rounded-full flex items-center justify-center text-lg font-bold tactile" style={{ background: "rgba(255,255,255,0.7)", color: "#1F4A5C" }}>✕</button>
+            <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center text-lg font-bold tactile" style={{ background: "rgba(255,255,255,0.7)", color: "#1F4A5C" }}>✕</button>
           </div>
 
           {/* Title block */}
@@ -2378,12 +2443,12 @@ const StartScreen = ({ onStart, isBonus = false }) => {
 /* ============================================================
    SCREEN 2 — TOPIC SELECT
    ============================================================ */
-const TopicScreen = ({ topics, selected, setSelected, onContinue, isTopicUnlocked, phrasesNeededToUnlock, phrasesByTopic, isBonus = false }) => (
+const TopicScreen = ({ topics, selected, setSelected, onContinue, isTopicUnlocked, phrasesNeededToUnlock, phrasesByTopic, isBonus = false, onBack = () => {} }) => (
   <div className="relative w-full h-full" style={{ background: "linear-gradient(180deg, #FFF8E8 0%, #FFF1D0 100%)" }}>
     <div className="relative h-full flex flex-col px-5 pt-4 pb-6">
       {/* Header bar with progress */}
       <div className="flex items-center gap-3 slide-up">
-        <button className="w-9 h-9 rounded-full flex items-center justify-center text-lg font-bold tactile" style={{ background: "white", color: "#1F4A5C", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>←</button>
+        <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center text-lg font-bold tactile" style={{ background: "white", color: "#1F4A5C", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>←</button>
         <div className="flex-1"><ProgressBar value={10} /></div>
       </div>
 
@@ -2744,7 +2809,7 @@ const StartHereCategoryScreen = ({ categories, currentIdx, progressFn, totalDone
    Minimal & snappy: sentence with a highlighted blank.
    User taps the blank, types one word, hits Next.
    ============================================================ */
-const StartHereFillScreen = ({ category, qIdx, total, sentence, onNext, pufflingState, reps }) => {
+const StartHereFillScreen = ({ category, qIdx, total, sentence, onNext, pufflingState, reps, onBack = () => {} }) => {
   const [text, setText] = useState("");
   const [focused, setFocused] = useState(false);
   const [floatPlus, setFloatPlus] = useState(null);
@@ -2796,6 +2861,7 @@ const StartHereFillScreen = ({ category, qIdx, total, sentence, onNext, puffling
         {/* Header */}
         <div className="flex items-center gap-3 slide-up">
           <button
+            onClick={onBack}
             className="w-9 h-9 rounded-full flex items-center justify-center text-lg font-bold tactile"
             style={{ background: "white", color: "#0A4A38", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}
           >
@@ -2952,7 +3018,7 @@ const StartHereFillScreen = ({ category, qIdx, total, sentence, onNext, puffling
    - Phase changes header tag + accent color
    ============================================================ */
 const QuestionScreen = ({
-  phase, qIdx, total, question, placeholder, chips, onNext, topicLabel, pufflingState, reps,
+  phase, qIdx, total, question, placeholder, chips, onNext, topicLabel, pufflingState, reps, onBack = () => {},
 }) => {
   const [text, setText] = useState("");
   const [glow, setGlow] = useState(false);
@@ -3066,7 +3132,7 @@ const QuestionScreen = ({
       <div className="relative h-full flex flex-col px-5 pt-4 pb-5">
         {/* Header */}
         <div className="flex items-center gap-3 slide-up">
-          <button className="w-9 h-9 rounded-full flex items-center justify-center text-lg font-bold tactile" style={{ background: "white", color: "#1F4A5C", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>←</button>
+          <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center text-lg font-bold tactile" style={{ background: "white", color: "#1F4A5C", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>←</button>
           <div className={`flex-1 rounded-full ${barSnap ? "bar-snap" : ""}`} style={{ borderRadius: 999 }}>
             <ProgressBar value={progress} />
           </div>
