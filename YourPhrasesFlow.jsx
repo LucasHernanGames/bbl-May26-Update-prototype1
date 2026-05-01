@@ -81,10 +81,10 @@ const GlobalStyles = () => (
     }
     .chip-pop { animation: chipPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
 
-    /* Pulsing CTA glow */
+    /* Pulsing CTA glow — preserve the white top-edge highlight throughout the animation */
     @keyframes ctaPulse {
-      0%, 100% { box-shadow: 0 8px 0 #D4A81F, 0 12px 24px rgba(245, 200, 26, 0.35); }
-      50%      { box-shadow: 0 8px 0 #D4A81F, 0 12px 32px rgba(245, 200, 26, 0.55); }
+      0%, 100% { box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.6), 0 8px 0 #C99227, 0 12px 24px rgba(245, 200, 26, 0.4); }
+      50%      { box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.6), 0 8px 0 #C99227, 0 14px 32px rgba(245, 200, 26, 0.6); }
     }
     .cta-pulse { animation: ctaPulse 2.2s ease-in-out infinite; }
 
