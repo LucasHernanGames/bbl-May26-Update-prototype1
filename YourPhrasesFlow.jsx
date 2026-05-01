@@ -708,7 +708,7 @@ export default function YourPhrasesFlow() {
   // - `lifetimeTarget`: mastery goal for this module
   const dailyModules = [
     { id: "phrases",       label: "Your Phrases",  sub: "Phrases about your life",    icon: "📖", color: "#F5C81A", colorLight: "#FFE89A",
-      unit: "phrases", dailyQuota: 30,  dailyDone: 0,  lifetime: 234,  lifetimeTarget: 10000 },
+      unit: "phrases", dailyQuota: 10,  dailyDone: 0,  lifetime: 234,  lifetimeTarget: 10000 },
     { id: "fiveK",         label: "5K List",       sub: "The most common words",      icon: "🗂️", color: "#5BC890", colorLight: "#7BD8A8",
       unit: "words",   dailyQuota: 15,  dailyDone: 0,  lifetime: 148,  lifetimeTarget: 5000 },
     { id: "pronunciation", label: "Pronunciation", sub: "Master the sounds",          icon: "🔊", color: "#FFA94D", colorLight: "#FFC07A",
@@ -799,7 +799,7 @@ export default function YourPhrasesFlow() {
 
   // --- Daily quota for the "Your Phrases" module ---
   // In production these would come from user prefs + today's saved progress.
-  const dailyGoal = 30;          // total phrases needed today to fully wake the Puffling
+  const dailyGoal = 10;          // total phrases needed today to fully wake the Puffling (set low for testing)
   const [dailyDone, setDailyDone] = useState(30); // demo defaults to bonus state — use dev panel to switch
   const [sessionSize, setSessionSize] = useState(null); // how many to do this session
   const [sessionDone, setSessionDone] = useState(0);    // how many done in this session
@@ -1289,7 +1289,7 @@ export default function YourPhrasesFlow() {
     setReps(0);
     setSessionSize(null);
     setSessionDone(0);
-    setDailyDone(30);
+    setDailyDone(10);
     setSessionStartDaily(0);
     setStartHereCategoryIdx(null);
     setModulesComplete({ phrases: true, fiveK: false, pronunciation: false, shadow: false, recall: false });
@@ -1307,8 +1307,8 @@ export default function YourPhrasesFlow() {
     setReps(0);
     setSessionSize(null);
     setSessionDone(0);
-    setDailyDone(30);
-    setSessionStartDaily(30);
+    setDailyDone(10);
+    setSessionStartDaily(10);
     setStartHereCategoryIdx(null);
     setModulesComplete({ phrases: true, fiveK: true, pronunciation: true, shadow: true, recall: true });
     setHasFinishedFirstSession(true);
