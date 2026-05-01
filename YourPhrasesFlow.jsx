@@ -688,16 +688,16 @@ export default function YourPhrasesFlow() {
   // the user enters "bonus" mode where they can pick any module to do again.
   // Demo: Your Phrases pre-completed so we can show various states.
   const [modulesComplete, setModulesComplete] = useState({
-    phrases: true,
-    fiveK: true,
-    pronunciation: true,
-    shadow: true,
-    recall: true,
+    phrases: false,
+    fiveK: false,
+    pronunciation: false,
+    shadow: false,
+    recall: false,
   });
 
   // Lifetime Recall reps drive the belt level. State so dev scenarios can override
   // (e.g. fresh user = 0 → White Belt L1; bonus mode = 1670 → Yellow Belt L7).
-  const [recallReps, setRecallReps] = useState(1670);
+  const [recallReps, setRecallReps] = useState(0);
   const [hasFinishedFirstSession, setHasFinishedFirstSession] = useState(true);
 
   // Each module has:
@@ -800,10 +800,10 @@ export default function YourPhrasesFlow() {
   // --- Daily quota for the "Your Phrases" module ---
   // In production these would come from user prefs + today's saved progress.
   const dailyGoal = 10;          // total phrases needed today to fully wake the Puffling (set low for testing)
-  const [dailyDone, setDailyDone] = useState(30); // demo defaults to bonus state — use dev panel to switch
+  const [dailyDone, setDailyDone] = useState(0); // demo defaults to fresh user — use dev panel to switch
   const [sessionSize, setSessionSize] = useState(null); // how many to do this session
   const [sessionDone, setSessionDone] = useState(0);    // how many done in this session
-  const [sessionStartDaily, setSessionStartDaily] = useState(30); // demo default — see dev panel
+  const [sessionStartDaily, setSessionStartDaily] = useState(0); // demo default — see dev panel
   const [interstitial, setInterstitial] = useState(null); // 'great' | 'halfway' | 'last' | null
 
   // --- Unlock progression ---
