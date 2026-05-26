@@ -1552,11 +1552,12 @@ const SHADOW_PHRASES = [
 
 // === DAILY RECALL — OPPONENT ROSTER (expanded for Phase 1) ===
 //
-// Each belt has a POOL of 10 opponents:
-//   - 3 are "today's lineup" — they appear in the default daily gauntlet
-//   - 7 are "rivals" — they appear randomly when the gauntlet extends past 3
-//     opponents (i.e. when your card queue is large enough to need more fights).
-//     Rivals unlock in the Dojo Hall when you first defeat them.
+// Each belt has a POOL of 15 opponents:
+//   - 5 are the STARTING daily pool — available from level 1 of the belt.
+//   - The other 10 are unlocked one at a time as you level up: a new challenger
+//     joins your daily pool every 2 levels (level 3, 5, 7, ...). See
+//     opponentsUnlockedAtLevel(). New challengers are introduced via the
+//     "a new opponent wants to challenge you" intro at the start of Recall.
 //
 // Each opponent has a `signature` slot — a UNIQUE ability they cast once per
 // fight at an unpredictable moment. White-belt opponents have `signature: null`
@@ -1567,75 +1568,83 @@ const SHADOW_PHRASES = [
 // Schema:
 //   { id, name, belt, level, tagline, rank, lineup, signature: { id, icon, name, desc } | null }
 //
-// For Phase 1 the structure is scaffolded; the yellow belt pool has the 3
-// existing launch opponents + 7 placeholders. Other belts have minimal stubs
-// so combat code can index into them safely. Real content (names, taglines,
-// signature abilities) gets filled in by Tony/design as we approach launch.
+// `lineup: true` marks the 5 starting opponents. The remaining 10 per belt are
+// placeholders (names/taglines/signatures) for design to fill in before launch.
 
 const BELT_OPPONENT_POOL = {
   white: [
-    // White-belt opponents have NO signature abilities — pure HP sponges,
-    // on-ramp for new users still learning the swipe/grade mechanic.
+    // 15 opponents per belt. The first 5 are the starting daily pool at level 1;
+    // one more unlocks every 2 levels (see opponentsUnlockedAtLevel). White-belt
+    // opponents have NO signature abilities — pure HP sponges, the easy on-ramp.
     { id: "w01", name: "Tito",      belt: "white", level: 1, tagline: "Day-one rookie.",       rank: "TRAINEE", lineup: true,  signature: null },
     { id: "w02", name: "Bea",       belt: "white", level: 1, tagline: "Still finding her gi.", rank: "TRAINEE", lineup: true,  signature: null },
     { id: "w03", name: "Junpei",    belt: "white", level: 2, tagline: "Eager but wobbly.",     rank: "TRAINEE", lineup: true,  signature: null },
-    { id: "w04", name: "Hana",      belt: "white", level: 2, tagline: null,                    rank: "TRAINEE", lineup: false, signature: null },
-    { id: "w05", name: "Diego",     belt: "white", level: 2, tagline: null,                    rank: "TRAINEE", lineup: false, signature: null },
+    { id: "w04", name: "Hana",      belt: "white", level: 2, tagline: null,                    rank: "TRAINEE", lineup: true,  signature: null },
+    { id: "w05", name: "Diego",     belt: "white", level: 2, tagline: null,                    rank: "TRAINEE", lineup: true,  signature: null },
     { id: "w06", name: "Yuki",      belt: "white", level: 3, tagline: null,                    rank: "TRAINEE", lineup: false, signature: null },
     { id: "w07", name: "Mateo",     belt: "white", level: 3, tagline: null,                    rank: "TRAINEE", lineup: false, signature: null },
     { id: "w08", name: "Lin",       belt: "white", level: 3, tagline: null,                    rank: "TRAINEE", lineup: false, signature: null },
     { id: "w09", name: "Otto",      belt: "white", level: 4, tagline: null,                    rank: "TRAINEE", lineup: false, signature: null },
     { id: "w10", name: "Sora",      belt: "white", level: 4, tagline: null,                    rank: "TRAINEE", lineup: false, signature: null },
+    { id: "w11", name: "Priya",     belt: "white", level: 5, tagline: null,                    rank: "TRAINEE", lineup: false, signature: null },
+    { id: "w12", name: "Cole",      belt: "white", level: 5, tagline: null,                    rank: "TRAINEE", lineup: false, signature: null },
+    { id: "w13", name: "Noa",       belt: "white", level: 6, tagline: null,                    rank: "TRAINEE", lineup: false, signature: null },
+    { id: "w14", name: "Emil",      belt: "white", level: 6, tagline: null,                    rank: "TRAINEE", lineup: false, signature: null },
+    { id: "w15", name: "Rosa",      belt: "white", level: 7, tagline: null,                    rank: "TRAINEE", lineup: false, signature: null },
   ],
   yellow: [
-    // Today's lineup — the 3 launch opponents
+    // First 5 are the starting daily pool at level 1; one more unlocks every 2 levels.
     { id: "y01", name: "Carlos",       belt: "yellow", level: 2, tagline: "Just a warm-up.",            rank: "TRAINEE",  lineup: true,
       signature: { id: "smirk",  icon: "😏", name: "SMIRK",    desc: "Taunts you — next card forced to harder pool" } },
     { id: "y02", name: "Senior Mai",   belt: "yellow", level: 4, tagline: "Sharper. Faster.",           rank: "SENIOR",   lineup: true,
       signature: { id: "veil",   icon: "🌫️", name: "VEIL",     desc: "Hides their HP bar for the next 3 cards" } },
     { id: "y03", name: "Captain Yua",  belt: "yellow", level: 8, tagline: "Beat her — earn the belt.",  rank: "CAPTAIN",  lineup: true,
       signature: { id: "patience", icon: "⏳", name: "PATIENCE", desc: "Halves the damage they take for 2 cards" } },
-    // The 7 rivals — unlock when defeated (placeholder content; signature design pending)
-    { id: "y04", name: "Rin",          belt: "yellow", level: 3, tagline: null, rank: "RIVAL",   lineup: false, signature: { id: "tbd_y04", icon: "✦", name: "TBD", desc: "Signature ability — content design pending" } },
-    { id: "y05", name: "Berto",        belt: "yellow", level: 4, tagline: null, rank: "RIVAL",   lineup: false, signature: { id: "tbd_y05", icon: "✦", name: "TBD", desc: "Signature ability — content design pending" } },
+    { id: "y04", name: "Rin",          belt: "yellow", level: 3, tagline: null, rank: "TRAINEE", lineup: true,  signature: { id: "tbd_y04", icon: "✦", name: "TBD", desc: "Signature ability — content design pending" } },
+    { id: "y05", name: "Berto",        belt: "yellow", level: 4, tagline: null, rank: "TRAINEE", lineup: true,  signature: { id: "tbd_y05", icon: "✦", name: "TBD", desc: "Signature ability — content design pending" } },
     { id: "y06", name: "Sofia",        belt: "yellow", level: 5, tagline: null, rank: "RIVAL",   lineup: false, signature: { id: "tbd_y06", icon: "✦", name: "TBD", desc: "Signature ability — content design pending" } },
     { id: "y07", name: "Kazuo",        belt: "yellow", level: 5, tagline: null, rank: "RIVAL",   lineup: false, signature: { id: "tbd_y07", icon: "✦", name: "TBD", desc: "Signature ability — content design pending" } },
     { id: "y08", name: "Nia",          belt: "yellow", level: 6, tagline: null, rank: "RIVAL",   lineup: false, signature: { id: "tbd_y08", icon: "✦", name: "TBD", desc: "Signature ability — content design pending" } },
     { id: "y09", name: "Esteban",      belt: "yellow", level: 7, tagline: null, rank: "RIVAL",   lineup: false, signature: { id: "tbd_y09", icon: "✦", name: "TBD", desc: "Signature ability — content design pending" } },
     { id: "y10", name: "Aiko",         belt: "yellow", level: 8, tagline: null, rank: "RIVAL",   lineup: false, signature: { id: "tbd_y10", icon: "✦", name: "TBD", desc: "Signature ability — content design pending" } },
+    { id: "y11", name: "Hugo",         belt: "yellow", level: 6, tagline: null, rank: "RIVAL",   lineup: false, signature: { id: "tbd_y11", icon: "✦", name: "TBD", desc: "Signature ability — content design pending" } },
+    { id: "y12", name: "Mei",          belt: "yellow", level: 7, tagline: null, rank: "RIVAL",   lineup: false, signature: { id: "tbd_y12", icon: "✦", name: "TBD", desc: "Signature ability — content design pending" } },
+    { id: "y13", name: "Dario",        belt: "yellow", level: 8, tagline: null, rank: "RIVAL",   lineup: false, signature: { id: "tbd_y13", icon: "✦", name: "TBD", desc: "Signature ability — content design pending" } },
+    { id: "y14", name: "Lucia",        belt: "yellow", level: 9, tagline: null, rank: "RIVAL",   lineup: false, signature: { id: "tbd_y14", icon: "✦", name: "TBD", desc: "Signature ability — content design pending" } },
+    { id: "y15", name: "Ravi",         belt: "yellow", level: 9, tagline: null, rank: "RIVAL",   lineup: false, signature: { id: "tbd_y15", icon: "✦", name: "TBD", desc: "Signature ability — content design pending" } },
   ],
   // Orange / Green / Blue / Purple / Brown / Black — stub arrays. Content design
   // pending. Combat code reads from these arrays once the player is promoted to
-  // that belt. Each stub has 10 entries with placeholder names so the gauntlet
+  // that belt. Each stub has 15 entries with placeholder names so the gauntlet
   // engine and roster UI work end-to-end even before final content lands.
-  orange: Array.from({ length: 10 }, (_, i) => ({
+  orange: Array.from({ length: 15 }, (_, i) => ({
     id: `o${String(i + 1).padStart(2, "0")}`, name: `Orange ${i + 1}`, belt: "orange", level: 2 + i,
-    tagline: null, rank: i < 3 ? "TRAINEE" : "RIVAL", lineup: i < 3,
+    tagline: null, rank: i < 5 ? "TRAINEE" : "RIVAL", lineup: i < 5,
     signature: { id: `tbd_o${i + 1}`, icon: "✦", name: "TBD", desc: "Signature ability — content design pending" },
   })),
-  green: Array.from({ length: 10 }, (_, i) => ({
+  green: Array.from({ length: 15 }, (_, i) => ({
     id: `g${String(i + 1).padStart(2, "0")}`, name: `Green ${i + 1}`, belt: "green", level: 2 + i,
-    tagline: null, rank: i < 3 ? "TRAINEE" : "RIVAL", lineup: i < 3,
+    tagline: null, rank: i < 5 ? "TRAINEE" : "RIVAL", lineup: i < 5,
     signature: { id: `tbd_g${i + 1}`, icon: "✦", name: "TBD", desc: "Signature ability — content design pending" },
   })),
-  blue: Array.from({ length: 10 }, (_, i) => ({
+  blue: Array.from({ length: 15 }, (_, i) => ({
     id: `b${String(i + 1).padStart(2, "0")}`, name: `Blue ${i + 1}`, belt: "blue", level: 2 + i,
-    tagline: null, rank: i < 3 ? "TRAINEE" : "RIVAL", lineup: i < 3,
+    tagline: null, rank: i < 5 ? "TRAINEE" : "RIVAL", lineup: i < 5,
     signature: { id: `tbd_b${i + 1}`, icon: "✦", name: "TBD", desc: "Signature ability — content design pending" },
   })),
-  purple: Array.from({ length: 10 }, (_, i) => ({
+  purple: Array.from({ length: 15 }, (_, i) => ({
     id: `p${String(i + 1).padStart(2, "0")}`, name: `Purple ${i + 1}`, belt: "purple", level: 2 + i,
-    tagline: null, rank: i < 3 ? "TRAINEE" : "RIVAL", lineup: i < 3,
+    tagline: null, rank: i < 5 ? "TRAINEE" : "RIVAL", lineup: i < 5,
     signature: { id: `tbd_p${i + 1}`, icon: "✦", name: "TBD", desc: "Signature ability — content design pending" },
   })),
-  brown: Array.from({ length: 10 }, (_, i) => ({
+  brown: Array.from({ length: 15 }, (_, i) => ({
     id: `br${String(i + 1).padStart(2, "0")}`, name: `Brown ${i + 1}`, belt: "brown", level: 2 + i,
-    tagline: null, rank: i < 3 ? "TRAINEE" : "RIVAL", lineup: i < 3,
+    tagline: null, rank: i < 5 ? "TRAINEE" : "RIVAL", lineup: i < 5,
     signature: { id: `tbd_br${i + 1}`, icon: "✦", name: "TBD", desc: "Signature ability — content design pending" },
   })),
-  black: Array.from({ length: 10 }, (_, i) => ({
+  black: Array.from({ length: 15 }, (_, i) => ({
     id: `bk${String(i + 1).padStart(2, "0")}`, name: `Black ${i + 1}`, belt: "black", level: 2 + i,
-    tagline: null, rank: i < 3 ? "ELITE" : "GRANDMASTER", lineup: i < 3,
+    tagline: null, rank: i < 5 ? "ELITE" : "GRANDMASTER", lineup: i < 5,
     signature: { id: `tbd_bk${i + 1}`, icon: "✦", name: "TBD", desc: "Signature ability — content design pending" },
   })),
 };
@@ -1646,6 +1655,14 @@ const BELT_OPPONENT_POOL = {
 const getOpponentPool = (belt) => BELT_OPPONENT_POOL[belt] || [];
 const getDailyLineup  = (belt) => getOpponentPool(belt).filter((o) => o.lineup);
 const getRivalPool    = (belt) => getOpponentPool(belt).filter((o) => !o.lineup);
+
+// How many of a belt's 15 opponents are available at a given belt level:
+// 5 to start (level 1), then +1 every 2 levels (level 3, 5, 7, ...), capped at 15.
+const opponentsUnlockedAtLevel = (level) => Math.min(15, 5 + Math.floor((Math.max(1, level) - 1) / 2));
+
+// The daily opponent pool the Recall gauntlet draws from, grown by belt level:
+// the first N opponents of the belt (starting 5 + any unlocked challengers).
+const getDailyPool = (belt, level) => getOpponentPool(belt).slice(0, opponentsUnlockedAtLevel(level));
 
 // === LEGACY ARRAY (preserved unchanged) ===
 // Existing combat code (InSparPlay, dojo records UI) still references this
@@ -6517,7 +6534,7 @@ const NewOpponentIntro = ({ opponent, onContinue }) => {
 //
 // Sections inside Dojo Hall:
 //   1. Belt tab selector (white / yellow / orange / ... / black)
-//   2. Opponent grid for the selected belt (5x2 = 10 cards)
+//   2. Opponent grid for the selected belt (2 columns × 15 cards)
 //   3. Free Duel + Casual + Ranked entry points (placeholder cards for now;
 //      full flows ship in Phase 4.5 / Phase 6)
 //
