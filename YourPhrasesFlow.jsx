@@ -23183,6 +23183,7 @@ const ShadowKataScreen = ({ onBack, onComplete, isReturning }) => {
   const obstaclesRef      = useRef([]);    // mirrors obstacles state so the rAF loop sees fresh data
   const hasJumpedRef      = useRef(false); // false until first jump → gates scroll/spawn/score
   const dashPausedRef     = useRef(false); // game pause — freezes the rAF loop completely
+  const dashSpeedSmoothRef = useRef(null); // eased actual scroll speed (prevents snap when a staircase scrolls off)
   const nextObstacleIdRef = useRef(1);
   const pufflingDOMRef    = useRef(null);  // for direct transform updates
   const [redFlash, setRedFlash] = useState(false); // red overlay flash on impact
@@ -23564,6 +23565,22 @@ const ShadowKataScreen = ({ onBack, onComplete, isReturning }) => {
       if (o.stair && o.x > -130 && o.x < 440) { stairActive = true; break; }
     }
     if (stairActive) dashSpeed = Math.min(dashSpeed, DASH.SCROLL_SPEED * 1.05);
+
+    // The above is a TARGET speed. Snapping straight to it caused a visible glitch:
+    // when a staircase scrolled off, the 1.05× clamp released and the world jumped
+    // from ~baseline to the full ramped speed in a single frame. Ease UPWARD toward
+    // the target over ~1s, but allow DOWNWARD changes to apply immediately (so a hit
+    // reset and entering a staircase still snap to slower, which reads as clear feedback).
+    if (dashSpeedSmoothRef.current === null) dashSpeedSmoothRef.current = dashSpeed;
+    const targetSpeed = dashSpeed;
+    if (targetSpeed <= dashSpeedSmoothRef.current) {
+      dashSpeedSmoothRef.current = targetSpeed; // snap down
+    } else {
+      // framerate-independent ease-in (time constant ~0.45s)
+      const k = 1 - Math.exp(-dt / 0.45);
+      dashSpeedSmoothRef.current += (targetSpeed - dashSpeedSmoothRef.current) * k;
+    }
+    dashSpeed = dashSpeedSmoothRef.current;
 
     // === Compute effective ground level (real ground OR platform under puffling) ===
     // Walk all platforms; if puffling x-overlaps one AND is at or above its
