@@ -22505,14 +22505,36 @@ const LanguageDivider = ({ lang, count, accent = "#7A4A1A" }) => (
    icons (audio, mnemonic indicator, heart) tucked to the right.
    ============================================================ */
 const PhraseEntry = ({ phrase: p, onToggleFav, onEdit }) => {
+  const [speaking, setSpeaking] = useState(false);
+  // Tap anywhere on the card (or the 🔊 icon) to hear the phrase spoken aloud.
+  const playPhrase = () => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    const localeMap = { es: "es-MX", fr: "fr-FR", ja: "ja-JP", zh: "zh-CN", ko: "ko-KR", it: "it-IT", en: "en-US", de: "de-DE", pt: "pt-BR", ar: "ar-SA" };
+    try {
+      window.speechSynthesis.cancel();
+      const u = new window.SpeechSynthesisUtterance(p.phrase);
+      u.lang = p.speechLang || localeMap[p.lang] || "es-MX";
+      u.rate = 0.85;
+      u.onend = () => setSpeaking(false);
+      u.onerror = () => setSpeaking(false);
+      setSpeaking(true);
+      window.speechSynthesis.speak(u);
+    } catch (e) { setSpeaking(false); }
+  };
   return (
     <div
-      className="rounded-2xl relative overflow-hidden"
+      onClick={playPhrase}
+      role="button"
+      aria-label="Play phrase audio"
+      className="rounded-2xl relative overflow-hidden cursor-pointer tactile"
       style={{
         padding: "14px 16px 12px",
         background: "linear-gradient(180deg, #FFFEF6 0%, #FFF8DD 100%)",
-        border: "1.5px solid rgba(122,74,26,0.15)",
-        boxShadow: "0 2px 0 rgba(122,74,26,0.08), 0 6px 14px rgba(184,80,32,0.05)",
+        border: speaking ? "1.5px solid #1A8F6E" : "1.5px solid rgba(122,74,26,0.15)",
+        boxShadow: speaking
+          ? "0 2px 0 rgba(26,143,110,0.18), 0 0 0 3px rgba(26,143,110,0.15)"
+          : "0 2px 0 rgba(122,74,26,0.08), 0 6px 14px rgba(184,80,32,0.05)",
+        transition: "border-color 0.15s, box-shadow 0.15s",
       }}
     >
       {/* Gold accent strip on top — gives the entry a stamped, official feel */}
@@ -22563,7 +22585,7 @@ const PhraseEntry = ({ phrase: p, onToggleFav, onEdit }) => {
 
         {/* Action icons column */}
         <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
-          <PhraseActionIcon icon="🔊" label="Play audio" />
+          <PhraseActionIcon icon="🔊" label="Play audio" active={speaking} onClick={playPhrase} />
           <PhraseActionIcon
             icon={p.favorite ? "❤️" : "🤍"}
             label="Favorite"
@@ -22583,7 +22605,7 @@ const PhraseEntry = ({ phrase: p, onToggleFav, onEdit }) => {
 /* Small action icon used inside phrase entries */
 const PhraseActionIcon = ({ icon, label, active, subtle, onClick }) => (
   <button
-    onClick={onClick}
+    onClick={(e) => { e.stopPropagation(); if (onClick) onClick(e); }}
     disabled={!onClick}
     className={onClick ? "tactile" : ""}
     aria-label={label}
@@ -23183,7 +23205,6 @@ const ShadowKataScreen = ({ onBack, onComplete, isReturning }) => {
   const obstaclesRef      = useRef([]);    // mirrors obstacles state so the rAF loop sees fresh data
   const hasJumpedRef      = useRef(false); // false until first jump → gates scroll/spawn/score
   const dashPausedRef     = useRef(false); // game pause — freezes the rAF loop completely
-  const dashSpeedSmoothRef = useRef(null); // eased actual scroll speed (prevents snap when a staircase scrolls off)
   const nextObstacleIdRef = useRef(1);
   const pufflingDOMRef    = useRef(null);  // for direct transform updates
   const [redFlash, setRedFlash] = useState(false); // red overlay flash on impact
@@ -23505,11 +23526,11 @@ const ShadowKataScreen = ({ onBack, onComplete, isReturning }) => {
     { normals: 6, stories: 3 },
   ];
   // Build a staircase: `stories` platforms rising step by step so the puffling
-  // hops up one at a time. Steps are LONG (so there's time to stand and line up
-  // the next hop) and well spaced. The world also slows while a staircase is on
-  // screen (below), so the climb is fair even on a fast streak. Top step = 2 coins.
+  // hops up one at a time. Steps are LONG (room to stand and line up the next hop)
+  // and widely spaced horizontally so the climb is fair at the normal scroll speed
+  // — the world never slows for a staircase. Top step = 2 coins.
   const STAIR_STEP_W = 130;
-  const STAIR_GAP_X  = 180;  // horizontal offset between consecutive steps
+  const STAIR_GAP_X  = 250;  // horizontal offset between consecutive steps (wide = time to jump each step at full speed)
   const STAIR_BASE_H = 56;   // height of the first (lowest) step
   const STAIR_RISE   = 52;   // height added per story
   const spawnStaircase = (stories) => {
@@ -23556,31 +23577,10 @@ const ShadowKataScreen = ({ onBack, onComplete, isReturning }) => {
     //     the obstacles. Hitting something resets the streak (below), so the
     //     speed snaps back to baseline and climbs again. Caps so it stays fair. ===
     const dashDiff = Math.min(1, streakRef.current / 1000);
+    // ONE constant pace driven only by the streak. Staircases do NOT change the
+    // speed at all — they're made climbable purely by spacing the steps further
+    // apart (see STAIR_GAP_X), so the player never feels a slow-down or speed-up.
     let dashSpeed = DASH.SCROLL_SPEED * (1 + dashDiff * 1.3);
-    // While a staircase is on screen, ease the world down to a manageable pace
-    // so the climb is fair even on a fast streak (Tony: rows felt too short and
-    // I was moving too fast). Returns to full speed once it scrolls past.
-    let stairActive = false;
-    for (const o of obstaclesRef.current) {
-      if (o.stair && o.x > -130 && o.x < 440) { stairActive = true; break; }
-    }
-    if (stairActive) dashSpeed = Math.min(dashSpeed, DASH.SCROLL_SPEED * 1.05);
-
-    // The above is a TARGET speed. Snapping straight to it caused a visible glitch:
-    // when a staircase scrolled off, the 1.05× clamp released and the world jumped
-    // from ~baseline to the full ramped speed in a single frame. Ease UPWARD toward
-    // the target over ~1s, but allow DOWNWARD changes to apply immediately (so a hit
-    // reset and entering a staircase still snap to slower, which reads as clear feedback).
-    if (dashSpeedSmoothRef.current === null) dashSpeedSmoothRef.current = dashSpeed;
-    const targetSpeed = dashSpeed;
-    if (targetSpeed <= dashSpeedSmoothRef.current) {
-      dashSpeedSmoothRef.current = targetSpeed; // snap down
-    } else {
-      // framerate-independent ease-in (time constant ~0.45s)
-      const k = 1 - Math.exp(-dt / 0.45);
-      dashSpeedSmoothRef.current += (targetSpeed - dashSpeedSmoothRef.current) * k;
-    }
-    dashSpeed = dashSpeedSmoothRef.current;
 
     // === Compute effective ground level (real ground OR platform under puffling) ===
     // Walk all platforms; if puffling x-overlaps one AND is at or above its
@@ -25173,7 +25173,7 @@ const ShadowSummary = ({ totalBoards, totalPerfects, bestTower, score, sessionMo
           <div className="font-body font-bold uppercase mb-1" style={{
             fontSize: 11, color: "rgba(255,238,196,0.6)", letterSpacing: "0.24em",
           }}>
-            {isDash ? "🎋 Dash Complete" : "🎧 Shadow Complete"}
+            🥊 Warm-Up Complete
           </div>
           <h1 className="font-display font-bold" style={{
             fontSize: 32, color: "#FFEEC4", letterSpacing: "0.02em",
@@ -25246,11 +25246,13 @@ const ShadowSummary = ({ totalBoards, totalPerfects, bestTower, score, sessionMo
   //   solid play (a few good runs, some perfects): ~4-8k
   //   strong play (long towers + many perfects + combos): 10k+
   const stars = score >= 8000 ? 3 : score >= 4500 ? 2 : score >= 1500 ? 1 : 0;
+  // Performance grade for the warm-up (score-based headline only — NOT a combat
+  // buff; Shadowing does not buff Recall battles).
   const tier =
-    stars === 3 ? { label: "MASTERED", color: "#FFD83A", buff: "+15% damage · +1 ability charge", icon: "🔥" } :
-    stars === 2 ? { label: "FORM FOUND",  color: "#FFA94D", buff: "+10% damage",                  icon: "⚡" } :
-    stars === 1 ? { label: "TRAINED",     color: "#C8A8F0", buff: "+5% damage",                   icon: "💪" } :
-                  { label: "PRACTICED",   color: "#FFEEC4", buff: "No buff — try again tomorrow", icon: "🐤" };
+    stars === 3 ? { label: "MASTERED",   color: "#FFD83A" } :
+    stars === 2 ? { label: "FORM FOUND", color: "#FFA94D" } :
+    stars === 1 ? { label: "TRAINED",    color: "#C8A8F0" } :
+                  { label: "PRACTICED",  color: "#FFEEC4" };
 
   return (
     <div className="relative w-full h-full overflow-y-auto no-scrollbar" style={{
@@ -25263,7 +25265,7 @@ const ShadowSummary = ({ totalBoards, totalPerfects, bestTower, score, sessionMo
           color: "rgba(255,238,196,0.6)",
           letterSpacing: "0.24em",
         }}>
-          🥋 Kata Complete
+          🥊 Warm-Up Complete
         </div>
         <h1 className="font-display font-bold" style={{
           fontSize: 36,
@@ -25309,41 +25311,6 @@ const ShadowSummary = ({ totalBoards, totalPerfects, bestTower, score, sessionMo
           <SummaryStat icon="🏆" label="Best tower" value={bestTower} />
         </div>
 
-        {/* Buff card */}
-        <div className="w-full max-w-xs rounded-2xl mb-6" style={{
-          padding: "14px 16px",
-          background: "linear-gradient(180deg, rgba(255,238,196,0.12) 0%, rgba(255,169,77,0.18) 100%)",
-          border: `1.5px solid ${tier.color}66`,
-          boxShadow: `inset 0 1px 0 rgba(255,255,255,0.18), 0 0 20px ${tier.color}33`,
-        }}>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span style={{ fontSize: 18 }}>{tier.icon}</span>
-            <span className="font-display font-bold uppercase" style={{
-              fontSize: 11,
-              color: tier.color,
-              letterSpacing: "0.18em",
-            }}>
-              Recall Buff
-            </span>
-          </div>
-          <div className="font-display font-bold" style={{
-            fontSize: 14.5,
-            color: "#FFEEC4",
-            letterSpacing: "0.01em",
-            lineHeight: 1.3,
-          }}>
-            {tier.buff}
-          </div>
-          {stars > 0 && (
-            <div className="font-body italic mt-1" style={{
-              fontSize: 11,
-              color: "rgba(255,238,196,0.55)",
-            }}>
-              Your Puffling carries this into the next Recall fight.
-            </div>
-          )}
-        </div>
-
         {/* Coins earned — 1 per rep */}
         <div className="relative flex items-center gap-2.5 w-full max-w-xs mb-6 rounded-2xl px-5 py-3 pop overflow-hidden" style={{ background: "linear-gradient(180deg, #FFF4C8 0%, #FFE89A 100%)", border: "1.5px solid #D4A81F", boxShadow: "0 4px 0 rgba(168,127,15,0.25)" }}>
           {Array.from({ length: 6 }).map((_, i) => (
@@ -25361,7 +25328,7 @@ const ShadowSummary = ({ totalBoards, totalPerfects, bestTower, score, sessionMo
           </div>
         </div>
 
-        {/* Done CTA — leads straight into Recall, where the buff lands */}
+        {/* Done CTA — leads straight into Recall */}
         <button
           onClick={() => onComplete({ score, totalBoards, totalPerfects, stars, totalReps, phrasesCount, dashCoins })}
           className="tactile font-display font-bold flex items-center justify-center gap-2"
