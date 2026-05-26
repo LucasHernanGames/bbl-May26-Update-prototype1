@@ -5234,17 +5234,9 @@ const InSparPlay = ({ onKO, onTimeOut, onYourKO, onEnd, onPause, resumeFrom, opp
                     <span style={{ zIndex: 2 }}>
                       {(() => {
                         const isBonus = !DUE_CARD_KEYS.includes(currentCardKey);
-                        const ph = card.phase === 1
-                          ? { t: "① RECOGNIZE", c: "#1A8F6E", bg: "rgba(26,143,110,0.15)" }
-                          : { t: "② PRODUCE",   c: "#A05A1A", bg: "rgba(160,90,26,0.15)" };
-                        return (
-                          <span className="flex items-center gap-1">
-                            {isBonus && (
-                              <span className="font-body font-bold uppercase" style={{ fontSize: 8, color: "#7A2D0A", background: "rgba(122,45,10,0.12)", padding: "2px 6px", borderRadius: 4, letterSpacing: "0.08em" }}>★ Bonus</span>
-                            )}
-                            <span className="font-body font-bold uppercase" style={{ fontSize: 8.5, color: ph.c, background: ph.bg, padding: "2px 7px", borderRadius: 4, letterSpacing: "0.08em" }}>{ph.t}</span>
-                          </span>
-                        );
+                        return isBonus ? (
+                          <span className="font-body font-bold uppercase" style={{ fontSize: 8, color: "#7A2D0A", background: "rgba(122,45,10,0.12)", padding: "2px 6px", borderRadius: 4, letterSpacing: "0.08em" }}>★ Bonus</span>
+                        ) : null;
                       })()}
                     </span>
                   </div>
@@ -6329,6 +6321,193 @@ const RecallStatTile = ({ label, value, accent = false }) => (
     </div>
   </div>
 );
+
+// ============================================================
+// NEW OPPONENT INTRO
+// Shown at the START of a Recall session right after the player gains a
+// belt level. Each level introduces one more opponent from the current
+// belt's pool (3 known at level 1 → all 10 by level 7). This dramatic
+// "a challenger approaches" card announces the newcomer and previews
+// their stats before the gauntlet begins.
+//
+// Props:
+//   opponent  — { name, belt, level, rank, tagline, signature }
+//   onContinue() — proceed (into Recall in the real flow; closes the
+//                  preview when launched from the dev panel)
+// ============================================================
+const NEW_OPP_BELT_TINT = {
+  white: "#FFFFFF", yellow: "#F5D94A", orange: "#FF9B47", green: "#5BC890",
+  blue: "#4DA5D9", purple: "#9F7AEA", brown: "#8B5A2B", black: "#1F2937",
+};
+const NewOpponentIntro = ({ opponent, onContinue }) => {
+  const tint = NEW_OPP_BELT_TINT[opponent.belt] || "#F5D94A";
+  const hp = hpFor(opponent.belt, opponent.level);
+  const dmg = damageFor(opponent.belt, opponent.level);
+  // The opponent's spoken taunt (Forbidden Memories–style pre-duel line).
+  const quote = opponent.quote || "I hear you're pretty tough. Let me show you what real fluency power looks like!";
+  // Two beats: (1) the trash-talk dialogue, then (2) the stat card → battle.
+  const [step, setStep] = useState(1);
+  // Typewriter reveal for the taunt — one character at a time, quick (FM-style).
+  const [typed, setTyped] = useState(0);
+  const fullyTyped = typed >= quote.length;
+  useEffect(() => {
+    if (step !== 1 || fullyTyped) return;
+    const t = setTimeout(() => setTyped((n) => n + 1), 24);
+    return () => clearTimeout(t);
+  }, [step, typed, fullyTyped, quote.length]);
+  // Tapping the box: finish the line instantly if still typing, else advance.
+  const handleDialogueTap = () => { if (!fullyTyped) setTyped(quote.length); else setStep(2); };
+  return (
+    <div className="relative w-full h-full overflow-y-auto no-scrollbar" style={{
+      background: "linear-gradient(180deg, #2A0A10 0%, #6E1620 55%, #A8302A 100%)",
+    }}>
+      {/* Rising-sun ray burst */}
+      <div className="absolute inset-0 pointer-events-none" style={{
+        background: "repeating-conic-gradient(from 0deg at 50% 40%, rgba(255,216,58,0.10) 0deg 7deg, transparent 7deg 14deg)",
+        maskImage: "radial-gradient(circle at 50% 40%, black 0%, transparent 70%)",
+        WebkitMaskImage: "radial-gradient(circle at 50% 40%, black 0%, transparent 70%)",
+      }} />
+
+      {/* ========== STEP 1 — TRASH TALK ========== */}
+      {step === 1 && (
+        <div className="relative flex flex-col items-center px-5 pt-7 pb-5" style={{ minHeight: "100%" }}>
+          <div className="font-body font-bold uppercase" style={{ fontSize: 17, color: "#FFD83A", letterSpacing: "0.16em", textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>
+            ⚔️ A New Challenger
+          </div>
+          <div className="font-body text-center mt-1.5" style={{ fontSize: 12.5, color: "rgba(255,243,230,0.82)", maxWidth: 280, lineHeight: 1.35 }}>
+            A new opponent has heard of your progress and wants to challenge you.
+          </div>
+
+          <div className="flex-1" style={{ minHeight: 12 }} />
+
+          {/* Creature + its speech box, grouped so the box sits right beneath it */}
+          <div className="flex flex-col items-center w-full">
+            {/* Portrait (name lives in the speech box below, not here) */}
+            <div className="relative flex flex-col items-center">
+              <div className="absolute" style={{ bottom: 4, width: 150, height: 24, borderRadius: "50%", background: `radial-gradient(ellipse, ${tint}55 0%, transparent 70%)`, filter: "blur(2px)" }} />
+              <div className="relative" style={{ animation: "battleIdle 2.6s ease-in-out infinite" }}>
+                <BattlePuffling size={150} belt={opponent.belt} facing="left" state="fighting" />
+              </div>
+            </div>
+
+            {/* Dialogue box — directly beneath the creature */}
+            <button
+              onClick={handleDialogueTap}
+              className="tactile relative w-full text-left mt-4"
+              style={{
+                maxWidth: 340,
+                background: "linear-gradient(180deg, #232744 0%, #1A1E3C 100%)",
+                border: "2px solid #FFD83A", borderRadius: 16, padding: "17px 16px 15px",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08)",
+              }}
+            >
+              <div className="font-display absolute" style={{
+                top: -12, left: 14,
+                background: "linear-gradient(180deg, #FFE066 0%, #FFA94D 100%)",
+                color: "#3D2A05", fontSize: 11, fontWeight: 900, letterSpacing: "0.06em",
+                padding: "3px 12px", borderRadius: 8, border: "1.5px solid #B85020", textTransform: "uppercase",
+              }}>
+                {opponent.name}
+              </div>
+              {/* Typewriter text — reserves height so the box doesn't resize as it fills */}
+              <div className="font-body" style={{ fontSize: 15, color: "#FFF3E6", lineHeight: 1.4, fontWeight: 700, minHeight: 63 }}>
+                “{quote.slice(0, typed)}”
+              </div>
+              {fullyTyped && (
+                <div className="absolute" style={{ bottom: 5, right: 12, color: "#FFD83A", fontSize: 12, animation: "battleIdle 1.3s ease-in-out infinite" }}>▼</div>
+              )}
+            </button>
+            <div className="font-body mt-2" style={{ fontSize: 10.5, color: "rgba(255,243,230,0.55)", letterSpacing: "0.08em" }}>
+              {fullyTyped ? "tap to continue" : "tap to skip"}
+            </div>
+          </div>
+
+          <div className="flex-1" style={{ minHeight: 12 }} />
+        </div>
+      )}
+
+      {/* ========== STEP 2 — STAT CARD → BATTLE ========== */}
+      {step === 2 && (
+        <div className="relative flex flex-col items-center px-6 pt-9 pb-6" style={{ minHeight: "100%" }}>
+          <div className="font-body font-bold uppercase mb-2" style={{ fontSize: 11, color: "#FFD83A", letterSpacing: "0.24em", textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>
+            ⚔️ Know Your Opponent
+          </div>
+
+          <div className="flex-1" style={{ minHeight: 10 }} />
+
+          {/* Character card */}
+          <div className="w-full rounded-3xl relative overflow-hidden" style={{
+            maxWidth: 320,
+            background: "linear-gradient(180deg, #FFFEF6 0%, #FFF6E0 100%)",
+            border: `2px solid ${tint}`,
+            boxShadow: `0 14px 40px rgba(0,0,0,0.45), 0 0 0 4px ${tint}33`,
+          }}>
+            <div className="relative flex items-center gap-3 px-4 pt-4 pb-3" style={{ background: `linear-gradient(180deg, ${tint}38 0%, ${tint}10 100%)` }}>
+              <div className="rounded-2xl flex items-center justify-center flex-shrink-0" style={{ width: 84, height: 84, background: `linear-gradient(180deg, ${tint}40 0%, ${tint}12 100%)`, border: `1.5px solid ${tint}` }}>
+                <BattlePuffling size={70} belt={opponent.belt} facing="left" state="fighting" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-display font-bold truncate" style={{ fontSize: 24, color: "#3D2A05", letterSpacing: "-0.02em", lineHeight: 1.05 }}>{opponent.name}</div>
+                <div className="flex items-center gap-1.5 mt-1.5">
+                  <MiniBelt belt={opponent.belt} width={22} height={10} />
+                  <span className="font-display font-bold" style={{ fontSize: 12, color: "#3D2A05" }}>Lv {opponent.level}</span>
+                  {opponent.rank && (
+                    <span className="font-body font-bold uppercase" style={{ fontSize: 9, color: "#7A5410", letterSpacing: "0.12em", marginLeft: 2 }}>· {opponent.rank}</span>
+                  )}
+                </div>
+                {opponent.tagline && (
+                  <div className="font-body italic mt-1.5" style={{ fontSize: 12, color: "rgba(58,42,5,0.65)", lineHeight: 1.25 }}>"{opponent.tagline}"</div>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 px-4 pt-3">
+              <div className="rounded-2xl text-center py-2.5" style={{ background: "rgba(232,68,78,0.10)", border: "1.5px solid rgba(232,68,78,0.28)" }}>
+                <div className="font-body font-bold uppercase" style={{ fontSize: 8.5, color: "#A82530", letterSpacing: "0.14em" }}>❤️ Health</div>
+                <div className="font-display font-bold" style={{ fontSize: 22, color: "#3D2A05", lineHeight: 1.1, fontVariantNumeric: "tabular-nums" }}>{hp}</div>
+              </div>
+              <div className="rounded-2xl text-center py-2.5" style={{ background: "rgba(255,169,77,0.12)", border: "1.5px solid rgba(232,122,34,0.3)" }}>
+                <div className="font-body font-bold uppercase" style={{ fontSize: 8.5, color: "#B85020", letterSpacing: "0.14em" }}>⚔️ Damage</div>
+                <div className="font-display font-bold" style={{ fontSize: 22, color: "#3D2A05", lineHeight: 1.1, fontVariantNumeric: "tabular-nums" }}>{dmg}</div>
+              </div>
+            </div>
+
+            {opponent.signature && (
+              <div className="mx-4 mt-2.5 mb-4 rounded-2xl p-3 flex items-start gap-3" style={{ background: `linear-gradient(180deg, ${tint}1A 0%, white 100%)`, border: `1px solid ${tint}55` }}>
+                <div className="rounded-xl flex items-center justify-center flex-shrink-0" style={{ width: 42, height: 42, background: "white", border: `1px solid ${tint}`, fontSize: 21 }}>{opponent.signature.icon}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-body font-bold uppercase" style={{ fontSize: 8.5, color: "#7A5410", letterSpacing: "0.12em" }}>Signature move</div>
+                  <div className="font-display font-bold" style={{ fontSize: 14, color: "#3D2A05", lineHeight: 1.1, marginTop: 1 }}>{opponent.signature.name}</div>
+                  <div className="font-body" style={{ fontSize: 11, color: "rgba(58,42,5,0.7)", lineHeight: 1.3, marginTop: 2 }}>{opponent.signature.desc}</div>
+                </div>
+              </div>
+            )}
+            {!opponent.signature && <div style={{ height: 16 }} />}
+          </div>
+
+          <div className="flex-1" style={{ minHeight: 14 }} />
+
+          {/* Battle CTA */}
+          <button
+            onClick={onContinue}
+            className="tactile font-display font-bold flex items-center justify-center gap-2 mt-5"
+            style={{
+              padding: "14px 34px", borderRadius: 16,
+              background: "linear-gradient(180deg, #FFE066 0%, #FFA94D 60%, #E87822 100%)",
+              color: "#3D2A05", fontSize: 15, letterSpacing: "0.14em",
+              border: "1.5px solid #B85020",
+              boxShadow: "0 4px 0 #B85020, inset 0 1px 0 rgba(255,255,255,0.45)",
+            }}
+          >
+            <span>BRING IT ON</span>
+            <span>→</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 
 // ============================================================
 // DOJO HALL — Phase 4
@@ -8438,6 +8617,16 @@ export default function YourPhrasesFlow() {
   // Shape: { type, fromBelt, fromLevel, toBelt, toLevel, fromHp, toHp, fromDmg, toDmg, newAbility }
   const [levelUpInfo, setLevelUpInfo] = useState(null);
 
+  // Dev-panel preview of the "a new opponent wants to challenge you" intro that
+  // shows at the start of a Recall session after the player gains a belt level.
+  // When non-null, holds the opponent object to display in the full-screen intro.
+  const [newOpponentPreview, setNewOpponentPreview] = useState(null);
+
+  // The opponent lineup for the next Recall gauntlet. Defaults to the standard
+  // daily three; when a new opponent is introduced (above), they take the FIRST
+  // slot so the player fights the newcomer first in the battle that follows.
+  const [recallLineup, setRecallLineup] = useState(RECALL_OPPONENTS);
+
   // === PAUSED RECALL BATTLE ===
   // Snapshot of a battle the user stepped away from. When non-null, hitting
   // Recall on home routes straight back into the arena with this state
@@ -9670,6 +9859,20 @@ export default function YourPhrasesFlow() {
     }
   };
 
+  // After the Recall warm-up intro(s), this is the last beat before the fight:
+  // if the player just gained a belt level and a new opponent is waiting to be
+  // introduced, show the "challenger approaches" dialogue first; otherwise drop
+  // straight into combat. Tony's level→opponent progression logic sets
+  // `newOpponentPreview` (the opponent to introduce) before entering Recall.
+  const proceedToRecallFight = () => {
+    if (newOpponentPreview) {
+      setScreen("newOpponentIntro");
+    } else {
+      setRecallLineup(RECALL_OPPONENTS);
+      setScreen("recallPlay");
+    }
+  };
+
   const startShadowModule = () => {
     // Returning users skip the two-screen "what is shadowing" tutorial and go
     // straight to the session (which carries a brief reminder chip instead).
@@ -9866,6 +10069,7 @@ export default function YourPhrasesFlow() {
     // Also clear modules so the home flow makes sense if you back out
     setModulesComplete({ phrases: true, fiveK: true, pronunciation: true, shadow: true, recall: false });
     setHasFinishedFirstSession(true);
+    setRecallLineup(RECALL_OPPONENTS);
     setScreen("recallPlay"); // Skip intros — straight to the action
   };
 
@@ -10188,6 +10392,19 @@ export default function YourPhrasesFlow() {
       buttons: [
         { label: "⚡ Preview Level Up", desc: "Orange L11 → L12 modal", action: devPreviewLevelUp },
         { label: "🏆 Preview New Belt", desc: "Orange L20 → Green L1", action: devPreviewNewBelt },
+        { label: "🥊 New opponent flow", desc: "Returning user taps Recall → pre-recall → intro → fight", action: () => {
+          // Set up a realistic returning user (victories > 0 → short pre-recall
+          // screen), queue a new opponent, then land on the pre-recall screen so
+          // you can tap through the whole flow into the battle.
+          devRecallReturning();
+          setNewOpponentPreview({
+            name: "Senior Mai", belt: "yellow", level: 4, rank: "SENIOR",
+            tagline: "Sharper. Faster. She's been watching you.",
+            quote: "I hear you're pretty tough. Let me show you what real fluency power looks like!",
+            signature: { icon: "🌫️", name: "VEIL", desc: "Hides their HP bar for the next 3 cards." },
+          });
+          setScreen("recallIntroShort");
+        } },
       ],
     },
     {
@@ -10427,6 +10644,18 @@ export default function YourPhrasesFlow() {
               onDevReset={devReset}
             />
           )}
+          {screen === "newOpponentIntro" && newOpponentPreview && (
+            <NewOpponentIntro
+              opponent={newOpponentPreview}
+              onContinue={() => {
+                // The introduced opponent becomes the FIRST fight of the gauntlet.
+                setRecallLineup([newOpponentPreview, ...RECALL_OPPONENTS.slice(1)]);
+                setNewOpponentPreview(null);
+                setScreen("recallPlay");
+              }}
+            />
+          )}
+
           {screen === "dojoHall" && (
             <DojoHallScreen
               metOpponents={metOpponents}
@@ -10809,13 +11038,13 @@ export default function YourPhrasesFlow() {
             <RecallIntroWhyScreen
               pufflingName={pufflingName}
               beltInfo={beltInfo}
-              onContinue={() => setScreen("recallPlay")}
+              onContinue={proceedToRecallFight}
               onBack={() => setScreen("home")}
             />
           )}
           {screen === "recallIntroHow" && (
             <RecallIntroHowScreen
-              onContinue={() => setScreen("recallPlay")}
+              onContinue={proceedToRecallFight}
               onBack={() => setScreen("recallIntroWhy")}
             />
           )}
@@ -10824,13 +11053,13 @@ export default function YourPhrasesFlow() {
               pufflingName={pufflingName}
               beltInfo={beltInfo}
               victories={victories}
-              onContinue={() => setScreen("recallPlay")}
+              onContinue={proceedToRecallFight}
               onBack={() => setScreen("home")}
             />
           )}
           {screen === "recallPlay" && (
             <InSparPlay
-              opponents={RECALL_OPPONENTS}
+              opponents={recallLineup}
               me={playerMe}
               resumeFrom={pausedRecallState}
               onPause={(snapshot) => {
