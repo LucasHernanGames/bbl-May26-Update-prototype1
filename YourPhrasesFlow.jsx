@@ -8521,6 +8521,9 @@ export default function YourPhrasesFlow() {
   // First-time 5K module flag. When false, user sees the two onboarding screens
   // (What is the 5K List? + Memory hooks intro) before the size picker.
   // Once they complete the intro, they skip straight to picker on future visits.
+  // First-time Your Phrases flag. When false, user sees a short "what & why"
+  // intro after "Wake Up Your Puffling" and before the topic picker.
+  const [hasSeenPhrasesIntro, setHasSeenPhrasesIntro] = useState(false);
   const [hasSeenFiveKIntro, setHasSeenFiveKIntro] = useState(false);
   const [hasSeenPronunciationIntro, setHasSeenPronunciationIntro] = useState(false);
   const [hasSeenShadowIntro, setHasSeenShadowIntro] = useState(false);
@@ -9779,6 +9782,10 @@ export default function YourPhrasesFlow() {
         // From topic select, go back to start screen
         setScreen("start");
         break;
+      case "phrasesIntroWhy":
+        // From the "what & why" intro, back to the Wake Up screen
+        setScreen("start");
+        break;
       case "start":
         // From the Wake Up Puffling screen, exit the module back to home
         setScreen("home");
@@ -10024,6 +10031,9 @@ export default function YourPhrasesFlow() {
     setStartHereCategoryIdx(null);
     setModulesComplete({ phrases: true, fiveK: true, pronunciation: true, shadow: true, recall: false });
     setHasFinishedFirstSession(true);
+    setPausedRecallState(null);              // no mid-fight resume → intros show
+    setNewOpponentPreview(null);
+    setRecallLineup(RECALL_OPPONENTS);
     setRecallReps(0);
     setVictories(0); // <- KEY: never cleared the dojo → full intro
     setCleanWins(0);
@@ -10047,6 +10057,9 @@ export default function YourPhrasesFlow() {
     setStartHereCategoryIdx(null);
     setModulesComplete({ phrases: true, fiveK: true, pronunciation: true, shadow: true, recall: false });
     setHasFinishedFirstSession(true);
+    setPausedRecallState(null);              // no mid-fight resume → short intro shows
+    setNewOpponentPreview(null);
+    setRecallLineup(RECALL_OPPONENTS);
     setRecallReps(4200); // Orange Belt L5 — established player with abilities (Shield + Heal) for testing
     setVictories(12); // <- KEY: > 0 routes to short intro
     setCleanWins(4);
@@ -10301,12 +10314,13 @@ export default function YourPhrasesFlow() {
   // === PER-MODULE FIRST-TIME / RETURNING scenarios ===
   // Brand-new user: no belt yet, nothing done, Start Here onboarding plays.
   const devPhrasesFirstTime = () => {
-    setScreen("home");
+    setScreen("start");
     setTopic(null); setQIdx(0); setAnswers({}); setReps(0);
     setSessionSize(null); setSessionDone(0); setDailyDone(0); setSessionStartDaily(0);
     setStartHereCategoryIdx(null);
     setModulesComplete({ phrases: false, fiveK: false, pronunciation: false, shadow: false, recall: false });
     setHasFinishedFirstSession(false); // genuine newcomer — "no belt yet"
+    setHasSeenPhrasesIntro(false);      // show the "what & why" intro
     setHasSeenFiveKIntro(false);
     setRecallReps(0);
     setVictories(0); setCleanWins(0); setWinStreak(0);
@@ -10319,12 +10333,13 @@ export default function YourPhrasesFlow() {
   // Returning user starting a fresh day at Phrases: has a belt + history,
   // nothing done YET today, Start Here already cleared on prior days.
   const devPhrasesReturning = () => {
-    setScreen("home");
+    setScreen("start");
     setTopic(null); setQIdx(0); setAnswers({}); setReps(0);
     setSessionSize(null); setSessionDone(0); setDailyDone(0); setSessionStartDaily(0);
     setStartHereCategoryIdx(null);
     setModulesComplete({ phrases: false, fiveK: false, pronunciation: false, shadow: false, recall: false });
     setHasFinishedFirstSession(true); // established — has a belt
+    setHasSeenPhrasesIntro(true);     // skip the intro — straight to topics
     setHasSeenFiveKIntro(true);
     setRecallReps(900);
     setVictories(8); setCleanWins(3); setWinStreak(1);
@@ -10882,7 +10897,13 @@ export default function YourPhrasesFlow() {
               onBack={() => setScreen("home")}
             />
           )}
-          {screen === "start"      && <StartScreen onStart={() => setScreen("topic")} isBonus={allModulesDone} onBack={goBack} canImport={importSupportsLang(activeLang)} onImport={() => setImportFlowOpen(true)} />}
+          {screen === "start"      && <StartScreen onStart={() => setScreen(hasSeenPhrasesIntro ? "topic" : "phrasesIntroWhy")} isBonus={allModulesDone} onBack={goBack} canImport={importSupportsLang(activeLang)} onImport={() => setImportFlowOpen(true)} />}
+          {screen === "phrasesIntroWhy" && (
+            <PhrasesIntroWhyScreen
+              onContinue={() => { setHasSeenPhrasesIntro(true); setScreen("topic"); }}
+              onBack={() => setScreen("start")}
+            />
+          )}
           {screen === "topic"      && (
             <TopicScreen
               topics={topics}
@@ -12631,6 +12652,85 @@ const ChooseTrainingScreen = ({ modules, modulesComplete, currentModuleIdx, allM
 /* ============================================================
    SCREEN 1 — START / "Wake Up Your Puffling"
    ============================================================ */
+/* ============================================================
+   YOUR PHRASES — INTRO ("WHAT & WHY")
+   First-time-only explainer shown after "Wake Up Your Puffling" and
+   before the topic picker. Sky/calm palette to match the StartScreen.
+   Gated on hasSeenPhrasesIntro; returning users skip straight to topics.
+   ============================================================ */
+const PhrasesWhyCard = ({ icon, iconBg, iconShadow, title, body, delay }) => (
+  <div className="rounded-2xl flex items-center gap-3.5 slide-up" style={{
+    background: "linear-gradient(180deg, #FFFFFF 0%, #F2FAFF 100%)", padding: "15px 17px",
+    border: "1px solid rgba(43,166,230,0.16)",
+    boxShadow: "0 4px 0 rgba(0,0,0,0.05), 0 10px 22px rgba(43,166,230,0.20)",
+    animationDelay: delay,
+  }}>
+    <div className="rounded-2xl flex items-center justify-center flex-shrink-0" style={{ width: 52, height: 52, background: iconBg, fontSize: 27, boxShadow: `0 4px 0 ${iconShadow}, inset 0 1px 0 rgba(255,255,255,0.4)` }}>{icon}</div>
+    <div className="flex-1 min-w-0">
+      <div className="font-display font-bold" style={{ fontSize: 15, color: "#0A3A48", lineHeight: 1.15 }}>{title}</div>
+      <div className="font-body font-semibold mt-1" style={{ fontSize: 12.5, color: "rgba(31,74,92,0.72)", lineHeight: 1.4 }}>{body}</div>
+    </div>
+  </div>
+);
+
+const PhrasesIntroWhyScreen = ({ onContinue, onBack }) => {
+  return (
+    <div className="relative w-full h-full">
+      <Sky variant="calm">
+        <div className="absolute sparkle text-yellow-200 text-2xl" style={{ top: "9%", left: "12%" }}>✦</div>
+        <div className="absolute sparkle text-white text-base" style={{ top: "16%", right: "14%", animationDelay: "0.7s" }}>✦</div>
+        <div className="absolute sparkle text-yellow-200 text-lg" style={{ top: "44%", left: "8%", animationDelay: "1.2s" }}>✦</div>
+
+        <div className="relative h-full flex flex-col px-5 pt-4 pb-6 overflow-y-auto no-scrollbar">
+          {/* Back nav */}
+          <div className="flex items-center gap-3 slide-up">
+            <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center text-lg font-bold tactile" style={{ background: "rgba(255,255,255,0.85)", color: "#1F4A5C" }}>←</button>
+            <div className="flex-1" />
+            <div style={{ width: 36 }} />
+          </div>
+
+          {/* Module chip */}
+          <div className="flex items-center justify-center gap-2 mt-2 slide-up" style={{ animationDelay: "60ms" }}>
+            <div className="rounded-lg flex items-center justify-center" style={{ width: 28, height: 28, background: "linear-gradient(180deg, #6FD0F5 0%, #2BA6E6 100%)", fontSize: 15, boxShadow: "0 2px 0 #1C7FB8" }}>💬</div>
+            <span className="font-display font-bold uppercase tracking-widest" style={{ fontSize: 12, color: "#0E5C70", letterSpacing: "0.1em" }}>Your Phrases</span>
+          </div>
+
+          {/* Hero */}
+          <div className="text-center mt-5 pop-in">
+            <h1 className="font-display font-bold" style={{ fontSize: 36, color: "#0A3A48", lineHeight: 1.02, textShadow: "0 2px 0 rgba(255,255,255,0.45)", letterSpacing: "-0.01em" }}>
+              Start With<br />Your Words
+            </h1>
+            <p className="font-body font-semibold mt-3 mx-auto" style={{ fontSize: 14, color: "#1F4A5C", maxWidth: 286, lineHeight: 1.4 }}>
+              Your Phrases is where you collect the real things <span style={{ fontWeight: 800, color: "#0E5C70" }}>you</span> want to say — and lock them into memory.
+            </p>
+          </div>
+
+          {/* Why cards */}
+          <div className="mt-5 flex flex-col gap-3">
+            <PhrasesWhyCard icon="💬" iconBg="linear-gradient(180deg, #6FD0F5 0%, #2BA6E6 100%)" iconShadow="#1C7FB8"
+              title="Phrases you'll actually use" body="Learn the words and sentences that matter in your life — not a generic textbook list." delay="180ms" />
+            <PhrasesWhyCard icon="🌱" iconBg="linear-gradient(180deg, #9FE6C0 0%, #34C088 100%)" iconShadow="#1A8F6E"
+              title="The foundation of it all" body="Every phrase you bank wakes up your Puffling and powers the rest of your training." delay="280ms" />
+          </div>
+
+          <div className="flex-1 min-h-3" />
+
+          {/* CTA */}
+          <div className="slide-up mt-5" style={{ animationDelay: "520ms" }}>
+            <button onClick={onContinue} className="tactile cta-pulse w-full py-3.5 rounded-2xl font-display font-bold" style={{
+              background: "linear-gradient(180deg, #FFE066 0%, #FFC940 50%, #F5A820 100%)",
+              color: "#3D2A05", fontSize: 16, letterSpacing: "0.02em",
+              boxShadow: "inset 0 1.5px 0 rgba(255,255,255,0.6), 0 8px 0 #C99227, 0 14px 28px rgba(245,200,26,0.5)",
+            }}>
+              GET STARTED →
+            </button>
+          </div>
+        </div>
+      </Sky>
+    </div>
+  );
+};
+
 const StartScreen = ({ onStart, isBonus = false, onBack = () => {}, canImport = false, onImport = () => {} }) => {
   const phrases = ["Hello", "Buenos días", "¿Cómo estás?", "Bonjour", "こんにちは"];
   return (
@@ -19136,9 +19236,10 @@ const RecallStepLine = ({ icon, iconBg, text }) => (
 const RecallIntroWhyScreen = ({ onContinue, onBack, pufflingName = "Pip", beltInfo }) => {
   return (
     <div className="relative w-full h-full overflow-y-auto no-scrollbar" style={{ background: "linear-gradient(180deg, #2A0A10 0%, #6E1620 48%, #A8302A 100%)" }}>
-      {/* Rising-sun ray burst behind the fighter — dojo banner energy */}
+      {/* Rising-sun ray burst behind the fighter — dojo banner energy.
+          Centered on the puffling so the rays radiate out from behind it. */}
       <div className="absolute pointer-events-none" style={{
-        top: "14%", left: "50%", transform: "translateX(-50%)", width: 360, height: 360, zIndex: 0,
+        top: "24%", left: "50%", transform: "translate(-50%, -50%)", width: 380, height: 380, zIndex: 0,
         borderRadius: "50%", overflow: "hidden",
         background: "repeating-conic-gradient(from 0deg at 50% 50%, rgba(255,206,120,0.16) 0deg, rgba(255,206,120,0.16) 5deg, transparent 5deg, transparent 13deg)",
         WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 0%, #000 30%, transparent 70%)",
@@ -19146,7 +19247,7 @@ const RecallIntroWhyScreen = ({ onContinue, onBack, pufflingName = "Pip", beltIn
       }} />
       {/* Warm sun glow */}
       <div className="absolute pointer-events-none" style={{
-        top: "17%", left: "50%", transform: "translateX(-50%)", width: 210, height: 210, zIndex: 0, borderRadius: "50%",
+        top: "24%", left: "50%", transform: "translate(-50%, -50%)", width: 210, height: 210, zIndex: 0, borderRadius: "50%",
         background: "radial-gradient(circle, rgba(255,180,90,0.5) 0%, rgba(255,120,60,0.18) 45%, transparent 72%)",
         animation: "preSessionGlow 5s ease-in-out infinite",
       }} />
@@ -23203,13 +23304,13 @@ const ShadowIntroHowScreen = ({ onContinue, onBack }) => {
               letterSpacing: "-0.01em",
             }}
           >
-            Shadow. Stack.
+            Speak Along
           </h1>
           <p
             className="font-body font-semibold mt-2 mx-auto"
             style={{ fontSize: 13, color: "rgba(10,90,69,0.78)", maxWidth: 290, lineHeight: 1.4 }}
           >
-            Every rep <span style={{ color: "#0A5A45", fontWeight: 800 }}>powers up</span> your Puffling.
+            Every rep helps your Puffling <span style={{ color: "#0A5A45", fontWeight: 800 }}>warm up</span> and get ready for battle.
           </p>
         </div>
 
@@ -23909,8 +24010,12 @@ const ShadowKataScreen = ({ onBack, onComplete, isReturning }) => {
           dashMacroIdxRef.current += 1;
           // Extra room after the climb: footprint of the staircase + a generous
           // landing buffer, converted to a time gap at the current scroll speed.
+          // The buffer scales steeply with climb height because a taller staircase
+          // means a longer fall off the top step — during that descent the world
+          // keeps scrolling, so the next ground object must start further out to
+          // stay jumpable once the puffling lands.
           const footprintPx = (macro.stories - 1) * STAIR_GAP_X + STAIR_STEP_W;
-          const landingBufferPx = 150 + macro.stories * 30; // taller climb = more drop
+          const landingBufferPx = 300 + macro.stories * 95; // taller climb = longer drop = more room
           spawnDelayOverrideRef.current = ((footprintPx + landingBufferPx) / dashSpeed) * 1000;
         } else {
           // === NORMAL OBSTACLE ===
