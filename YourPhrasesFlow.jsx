@@ -1049,6 +1049,7 @@ const _synthFallbackFor = {
 
 const _soundBuffers = {}; // slug -> decoded AudioBuffer
 const _soundEls = {};     // slug -> HTMLAudioElement (fallback)
+const _soundReady = {};   // slug -> "buffer" | "audio"  (only set when actually playable)
 let _soundsPreloaded = false;
 
 // Decode the whole pack once. Safe to call repeatedly (no-ops after first).
@@ -1058,28 +1059,47 @@ const preloadSounds = () => {
   const ctx = _getUiCtx();
   Object.entries(SOUND_FILES).forEach(([slug, file]) => {
     const url = SOUND_BASE + file;
-    // Always set up an <audio> fallback (works even if Web Audio decode fails).
-    try { const a = new Audio(url); a.preload = "auto"; _soundEls[slug] = a; } catch (e) {}
-    // Pre-decode into a buffer for instant, overlap-friendly playback.
+    // <audio> fallback — but only mark it usable once it can actually play,
+    // so a missing/404 file doesn't swallow the play and block the synth.
+    try {
+      const a = new Audio(url);
+      a.preload = "auto";
+      a.addEventListener("canplaythrough", () => { if (_soundReady[slug] !== "buffer") _soundReady[slug] = "audio"; }, { once: true });
+      a.addEventListener("error", () => { console.warn("[BBL sound] could not load", url); });
+      _soundEls[slug] = a;
+      a.load();
+    } catch (e) {}
+    // Pre-decode into a Web Audio buffer for instant, overlap-friendly playback.
     if (ctx && ctx.decodeAudioData) {
       fetch(url)
-        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error("404"))))
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error("HTTP " + r.status))))
         .then((data) => ctx.decodeAudioData(data))
-        .then((decoded) => { _soundBuffers[slug] = decoded; })
-        .catch(() => {}); // fall back to <audio>, then synth
+        .then((decoded) => { _soundBuffers[slug] = decoded; _soundReady[slug] = "buffer"; })
+        .catch((err) => { console.warn("[BBL sound] decode/fetch failed for", url, String(err)); });
     }
   });
+  // Dev helper: run __bblSoundStatus() in the browser console to see which
+  // clips actually loaded vs. fell back to the synth.
+  try {
+    if (typeof window !== "undefined") {
+      window.__bblSoundStatus = () =>
+        Object.keys(SOUND_FILES).reduce((o, slug) => {
+          o[slug] = _soundReady[slug] || "MISSING → synth fallback";
+          return o;
+        }, {});
+    }
+  } catch (e) {}
 };
 
 const playSound = (slug) => {
   const ctx = _getUiCtx();
+  const ready = _soundReady[slug];
   // 1) Web Audio buffer — snappiest, handles rapid overlapping taps.
-  const buf = _soundBuffers[slug];
-  if (ctx && buf) {
+  if (ctx && ready === "buffer" && _soundBuffers[slug]) {
     try {
       if (ctx.state === "suspended") ctx.resume();
       const src = ctx.createBufferSource();
-      src.buffer = buf;
+      src.buffer = _soundBuffers[slug];
       const g = ctx.createGain();
       g.gain.value = 0.9;
       src.connect(g).connect(ctx.destination);
@@ -1087,12 +1107,12 @@ const playSound = (slug) => {
       return;
     } catch (e) {}
   }
-  // 2) <audio> fallback — clone so overlapping plays don't cut each other off.
-  const el = _soundEls[slug];
-  if (el) {
-    try { const c = el.cloneNode(true); c.volume = 0.9; const p = c.play(); if (p) p.catch(() => {}); return; } catch (e) {}
+  // 2) <audio> fallback — only if it actually loaded. Clone so overlapping
+  //    plays don't cut each other off.
+  if (ready === "audio" && _soundEls[slug]) {
+    try { const c = _soundEls[slug].cloneNode(true); c.volume = 0.9; const p = c.play(); if (p) p.catch(() => {}); return; } catch (e) {}
   }
-  // 3) Synth fallback — never silent.
+  // 3) Synth fallback — never silent, even if no files are reachable.
   playUiTap(_synthFallbackFor[slug] || "tap");
 };
 
@@ -10638,6 +10658,30 @@ export default function YourPhrasesFlow() {
         { label: "🇪🇸 Back to Spanish", desc: "Switch active language back to Spanish", action: () => { setActiveLang("es"); setPufflingName("Pip"); } },
       ],
     },
+    {
+      title: "Sound check", hover: "rgba(159, 122, 234, 0.20)",
+      buttons: [
+        { label: "🔊 Test sound pack", desc: "Loads every clip, then reports which are reachable + plays each", action: () => {
+          preloadSounds();
+          // Give fetch/decode a moment, then report status + audition each clip.
+          setTimeout(() => {
+            const status = (typeof window !== "undefined" && window.__bblSoundStatus) ? window.__bblSoundStatus() : {};
+            const lines = Object.keys(SOUND_FILES).map((slug) => {
+              const s = status[slug] || "MISSING → synth";
+              const ok = s === "buffer" || s === "audio";
+              return `${ok ? "✓" : "✗"}  ${slug}  (${SOUND_BASE + SOUND_FILES[slug]})  →  ${s}`;
+            });
+            const anyOk = Object.values(status).some((s) => s === "buffer" || s === "audio");
+            const header = anyOk
+              ? "Sound pack status (auditioning each clip now):"
+              : `NO clips loaded from "${SOUND_BASE}". Check the files exist there with these exact names — you're hearing the synth fallback.`;
+            // Audition the reachable ones, spaced out so you can hear each.
+            Object.keys(SOUND_FILES).forEach((slug, i) => setTimeout(() => playSound(slug), i * 700));
+            alert(header + "\n\n" + lines.join("\n"));
+          }, 1600);
+        } },
+      ],
+    },
   ];
 
   // Dev panel open/closed
@@ -15367,13 +15411,23 @@ const FiveKWordScreen = ({ word, wordIdx, total, deckCount, onNext, onBack }) =>
   const [microStitial, setMicroStitial] = useState(false); // brief between-word celebration overlay
   const [playing, setPlaying] = useState(false);
 
-  // Reset audio state when word changes (e.g. moving to the next card)
-  useEffect(() => { setPlaying(false); }, [wordIdx]);
+  // Reset audio state when word changes, then auto-play the new word's
+  // pronunciation so the user hears it while building the memory hook. Tapping
+  // the card (or the 🔊) replays it any time. Works for any language via
+  // word.region (Korean ko-KR, Spanish es-MX, etc.).
+  useEffect(() => {
+    setPlaying(false);
+    const t = setTimeout(() => speakWord(), 450); // small beat so the card settles first
+    return () => {
+      clearTimeout(t);
+      try { if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
+    };
+  }, [wordIdx]);
 
-  // Pronounce the translated word. Uses the browser's SpeechSynthesis as a stand-in;
-  // production should wire this to a higher-quality TTS (e.g. ElevenLabs) per word.region.
-  const playPronunciation = () => {
-    if (playing) return;
+  // Speak the translated word using the browser's SpeechSynthesis (stand-in;
+  // production should wire a higher-quality TTS per word.region). Cancels any
+  // in-flight utterance first, so calling it again cleanly restarts playback.
+  const speakWord = () => {
     setPlaying(true);
     try {
       if (typeof window !== "undefined" && window.speechSynthesis) {
@@ -15392,6 +15446,9 @@ const FiveKWordScreen = ({ word, wordIdx, total, deckCount, onNext, onBack }) =>
       setTimeout(() => setPlaying(false), 900);
     }
   };
+
+  // Manual tap on the card / 🔊 — always replays (restarts) the word audio.
+  const playPronunciation = () => { speakWord(); };
 
   const progress = ((wordIdx) / total) * 100;
   const progressNext = ((wordIdx + 1) / total) * 100;
