@@ -1024,7 +1024,7 @@ const playUiTap = (variant = "tap") => {
    ↳ If the dev serves the clips from a different path, change the
      ONE line below (SOUND_BASE). Filenames must match exactly.
    ============================================================ */
-const SOUND_BASE = "/sounds/"; // public/sounds/ — served at site root on Vercel
+const SOUND_BASE = "/"; // clips live in public/ → served at site root on Vercel
 
 const SOUND_FILES = {
   click:            "click.mp3",            // generic in-session tap (default)
