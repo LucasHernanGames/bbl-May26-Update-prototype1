@@ -1035,6 +1035,7 @@ const SOUND_FILES = {
   phrasebook:       "phrasebook.mp3",       // opening the phrasebook
   coins:            "coins.mp3",            // reps / coins reward landing
   progress:         "progress.mp3",         // mid-session progress / milestone popup
+  "last-one":       "last-one.mp3",         // the "LAST ONE!" encouragement popup
   "flash-correct":  "flash-correct.mp3",    // 5K flashcard — got it
   "flash-wrong":    "flash-wrong.mp3",      // 5K flashcard — missed it
 };
@@ -1045,6 +1046,7 @@ const _synthFallbackFor = {
   continue: "confirm", "start-training": "confirm",
   phrasebook: "tap", coins: "confirm", progress: "confirm",
   "flash-correct": "confirm", "flash-wrong": "back",
+  "last-one": "confirm",
 };
 
 const _soundBuffers = {}; // slug -> decoded AudioBuffer
@@ -9555,7 +9557,7 @@ export default function YourPhrasesFlow() {
         ? pickInterstitial(qIdx + 1, phaseTotal)  // qIdx+1 = the question they just FINISHED
         : null;
       if (variant) {
-        playSound("progress");
+        playSound(variant === "last" ? "last-one" : "progress");
         setInterstitial(variant);
         const duration = variant === "last" ? 1600 : 1000;
         setTimeout(() => {
@@ -9659,7 +9661,7 @@ export default function YourPhrasesFlow() {
     if (qIdx < total - 1) {
       const variant = pickInterstitial(qIdx + 1, total);
       if (variant) {
-        playSound("progress");
+        playSound(variant === "last" ? "last-one" : "progress");
         setInterstitial(variant);
         const duration = variant === "last" ? 1600 : 1000;
         setTimeout(() => {
@@ -16108,6 +16110,12 @@ const FiveKReviewScreen = ({ initialQueue, onComplete, onBack }) => {
   // Retries don't overwrite it: a lapse on first try counts as a miss even
   // if you later get it right this session.
   const resultsRef = useRef({});
+  // Progress encouragement popups (mirrors the new-words flow). baseTotal is the
+  // ORIGINAL review count (fixed denominator — the queue grows with retries),
+  // and clearedRef tracks distinct words cleared so each milestone fires once.
+  const baseTotalRef = useRef((initialQueue || []).length);
+  const clearedRef = useRef(new Set());
+  const [microStitial, setMicroStitial] = useState(null); // { wordsFed, total } | null
 
   const item = queue[idx];
   const hasHook = !!item && !!item.hook;
@@ -16155,7 +16163,24 @@ const FiveKReviewScreen = ({ initialQueue, onComplete, onBack }) => {
       resultsRef.current[item.id] = knew ? "knew" : "forgot";
     }
     if (knew) {
-      setTimeout(() => next(), 650);
+      // Clear this word once, and surface a progress interstitial at the key
+      // beats — great start / halfway / one more. The popup plays the progress
+      // (or last-one) sound itself on mount.
+      const firstClear = item && !clearedRef.current.has(item.id);
+      if (firstClear) clearedRef.current.add(item.id);
+      const cleared = clearedRef.current.size;
+      const bt = baseTotalRef.current;
+      const milestone = firstClear && cleared < bt && (
+        (cleared === 1 && bt > 1) ||
+        (bt >= 4 && cleared === Math.ceil(bt / 2)) ||
+        (bt >= 3 && cleared === bt - 1)
+      );
+      if (milestone) {
+        setTimeout(() => setMicroStitial({ wordsFed: cleared, total: bt }), 350);
+        setTimeout(() => { setMicroStitial(null); next(); }, 1500);
+      } else {
+        setTimeout(() => next(), 650);
+      }
     } else {
       // Re-queue this word to the back of the session.
       setQueue((q) => [...q, { ...item, isRetry: true }]);
@@ -16281,6 +16306,11 @@ const FiveKReviewScreen = ({ initialQueue, onComplete, onBack }) => {
         {/* Lift the controls slightly off the bottom edge */}
         <div style={{ height: 40 }} />
       </div>
+
+      {/* Progress encouragement overlay — same popup the new-words flow uses */}
+      {microStitial && (
+        <FiveKMicroInterstitial wordsFed={microStitial.wordsFed} total={microStitial.total} />
+      )}
     </div>
   );
 };
@@ -16812,6 +16842,10 @@ const FiveKMicroInterstitial = ({ wordsFed, total }) => {
   const isHalf = wordsFed === Math.ceil(total / 2) && total >= 4;
   const isAlmost = wordsFed === total - 1 && total >= 3;
   const isFinal = wordsFed === total;
+  // Encouragement sound — the "One More!" (last-one) beat gets its own clip;
+  // every other progress popup uses the standard progress sound. Fires once
+  // each time this popup appears (in both the new-words and review flows).
+  useEffect(() => { playSound(isAlmost ? "last-one" : "progress"); }, []);
 
   // Pick the right message based on progress
   let msg, emoji, color;
@@ -17358,7 +17392,7 @@ const PronunciationPracticeScreen = ({ phrase, phraseIdx, total, isReturning, on
 
     if (m) {
       // Milestone path: chip floats, then big celebration overlay, then advance
-      setTimeout(() => { setMilestone(m); playSound("progress"); }, 350);
+      setTimeout(() => { setMilestone(m); playSound(m.text === "Last one!" ? "last-one" : "progress"); }, 350);
       setTimeout(() => {
         setMilestone(null);
         setShowPlusOne(false);
