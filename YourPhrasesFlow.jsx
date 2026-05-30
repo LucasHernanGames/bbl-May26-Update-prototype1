@@ -955,6 +955,147 @@ const Sky = ({ children, variant = "calm" }) => {
 /* ============================================================
    CONFETTI BURST
    ============================================================ */
+/* ============================================================
+   GLOBAL UI SOUND — a cute, Stardew-ish button "plip"
+   Synthesized with Web Audio (no audio files to ship). One shared
+   AudioContext, lazily created on the first user gesture. Soft attack,
+   short decay, and a slight random detune so repeated taps feel organic
+   and never grate. Deliberately low gain — present but never naggy.
+   ============================================================ */
+let _uiAudioCtx = null;
+const _getUiCtx = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    if (!_uiAudioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      _uiAudioCtx = new AC();
+    }
+    if (_uiAudioCtx.state === "suspended") _uiAudioCtx.resume().catch(() => {});
+    return _uiAudioCtx;
+  } catch (e) { return null; }
+};
+
+const playUiTap = (variant = "tap") => {
+  const ctx = _getUiCtx();
+  if (!ctx) return;
+  try {
+    const now = ctx.currentTime;
+    const bases = { tap: 680, confirm: 760, back: 440 };
+    const base = (bases[variant] || 680) * (0.985 + Math.random() * 0.03); // ±~1.5% organic detune
+
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0.0001, now);
+    master.gain.exponentialRampToValueAtTime(variant === "confirm" ? 0.10 : 0.075, now + 0.010); // soft attack (no click)
+    master.gain.exponentialRampToValueAtTime(0.0001, now + 0.17);                                // gentle decay
+    master.connect(ctx.destination);
+
+    // Warm sine fundamental.
+    const o1 = ctx.createOscillator();
+    o1.type = "sine";
+    o1.frequency.setValueAtTime(base, now);
+    if (variant === "confirm") o1.frequency.exponentialRampToValueAtTime(base * 1.2, now + 0.10); // tiny upward grace note
+    const g1 = ctx.createGain(); g1.gain.value = 1;
+    o1.connect(g1).connect(master);
+
+    // Quiet woody overtone (~octave + fifth) for that marimba/xylophone pluck.
+    const o2 = ctx.createOscillator();
+    o2.type = "triangle";
+    o2.frequency.setValueAtTime(base * 3, now);
+    const g2 = ctx.createGain(); g2.gain.value = 0.22;
+    o2.connect(g2).connect(master);
+
+    o1.start(now); o2.start(now);
+    o1.stop(now + 0.19); o2.stop(now + 0.19);
+  } catch (e) {}
+};
+
+/* ============================================================
+   REAL SOUND PACK — file-based UI sounds (replaces the synth)
+   ------------------------------------------------------------
+   Clips live in the deploy's PUBLIC folder and are served at
+   SOUND_BASE. We pre-decode each one into a Web Audio buffer on
+   first interaction so rapid taps stay snappy; an <audio> element
+   is kept as a fallback, and the synth playUiTap() is the last
+   resort if a file is missing/blocked. To play a specific sound,
+   either add data-sound="<slug>" to a button (the global listener
+   reads it) or call playSound("<slug>") directly from logic.
+
+   ↳ If the dev serves the clips from a different path, change the
+     ONE line below (SOUND_BASE). Filenames must match exactly.
+   ============================================================ */
+const SOUND_BASE = "/sounds/"; // public/sounds/ — served at site root on Vercel
+
+const SOUND_FILES = {
+  click:            "click.mp3",            // generic in-session tap (default)
+  back:             "back.mp3",             // back arrow
+  close:            "close.mp3",            // modal close / ✕
+  continue:         "continue.mp3",         // in-session CONTINUE / next CTA
+  "start-training": "start-training.mp3",   // home "START TRAINING" CTA
+  phrasebook:       "phrasebook.mp3",       // opening the phrasebook
+  coins:            "coins.mp3",            // reps / coins reward landing
+  progress:         "progress.mp3",         // mid-session progress / milestone popup
+  "flash-correct":  "flash-correct.mp3",    // 5K flashcard — got it
+  "flash-wrong":    "flash-wrong.mp3",      // 5K flashcard — missed it
+};
+
+// Which synth variant to fall back to if a clip can't load, per slug.
+const _synthFallbackFor = {
+  click: "tap", back: "back", close: "back",
+  continue: "confirm", "start-training": "confirm",
+  phrasebook: "tap", coins: "confirm", progress: "confirm",
+  "flash-correct": "confirm", "flash-wrong": "back",
+};
+
+const _soundBuffers = {}; // slug -> decoded AudioBuffer
+const _soundEls = {};     // slug -> HTMLAudioElement (fallback)
+let _soundsPreloaded = false;
+
+// Decode the whole pack once. Safe to call repeatedly (no-ops after first).
+const preloadSounds = () => {
+  if (_soundsPreloaded) return;
+  _soundsPreloaded = true;
+  const ctx = _getUiCtx();
+  Object.entries(SOUND_FILES).forEach(([slug, file]) => {
+    const url = SOUND_BASE + file;
+    // Always set up an <audio> fallback (works even if Web Audio decode fails).
+    try { const a = new Audio(url); a.preload = "auto"; _soundEls[slug] = a; } catch (e) {}
+    // Pre-decode into a buffer for instant, overlap-friendly playback.
+    if (ctx && ctx.decodeAudioData) {
+      fetch(url)
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error("404"))))
+        .then((data) => ctx.decodeAudioData(data))
+        .then((decoded) => { _soundBuffers[slug] = decoded; })
+        .catch(() => {}); // fall back to <audio>, then synth
+    }
+  });
+};
+
+const playSound = (slug) => {
+  const ctx = _getUiCtx();
+  // 1) Web Audio buffer — snappiest, handles rapid overlapping taps.
+  const buf = _soundBuffers[slug];
+  if (ctx && buf) {
+    try {
+      if (ctx.state === "suspended") ctx.resume();
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const g = ctx.createGain();
+      g.gain.value = 0.9;
+      src.connect(g).connect(ctx.destination);
+      src.start(0);
+      return;
+    } catch (e) {}
+  }
+  // 2) <audio> fallback — clone so overlapping plays don't cut each other off.
+  const el = _soundEls[slug];
+  if (el) {
+    try { const c = el.cloneNode(true); c.volume = 0.9; const p = c.play(); if (p) p.catch(() => {}); return; } catch (e) {}
+  }
+  // 3) Synth fallback — never silent.
+  playUiTap(_synthFallbackFor[slug] || "tap");
+};
+
 const Confetti = () => {
   const colors = ["#F5C81A", "#FF8FB1", "#5DD8C0", "#A8E0F0", "#FFB347"];
   const pieces = Array.from({ length: 28 }).map((_, i) => ({
@@ -1534,20 +1675,18 @@ const answerMatches = (input, accepted = []) => {
 // back and forth and the user taps to chop it into a stack. Aim is engagement
 // during shadowing repetition. 5 phrases per session, 3 plays per phrase.
 const SHADOW_PHRASES = [
-  // seenBefore=false → user is seeing this phrase fresh from their phrasebook,
-  // so it gets 5 reps in shadow training to lock it in
-  // seenBefore=true → familiar, only 3 reps needed
-  // phon = phonetic syllabification (IPA-lite, matching Pronunciation module style)
-  { id: "sh01", lang: "es", phrase: "Hola, ¿cómo estás?",            translation: "Hello, how are you?",            phon: "o-la, ko-mo es-tas",                  speechLang: "es-MX", seenBefore: false },
-  { id: "sh02", lang: "es", phrase: "Estoy muy bien, gracias",        translation: "I'm very well, thanks",          phon: "es-toi mui bien, ɡra-sias",           speechLang: "es-MX", seenBefore: true  },
-  { id: "sh03", lang: "es", phrase: "¿De dónde eres tú?",             translation: "Where are you from?",            phon: "de don-de e-res tu",                  speechLang: "es-MX", seenBefore: true  },
-  { id: "sh04", lang: "es", phrase: "Yo soy de los Estados Unidos",   translation: "I'm from the United States",     phon: "ʝo soi de los es-ta-dos u-ni-dos",    speechLang: "es-MX", seenBefore: true  },
-  { id: "sh05", lang: "es", phrase: "Mucho gusto en conocerte",       translation: "Nice to meet you",               phon: "mu-tʃo ɡus-to en ko-no-ser-te",       speechLang: "es-MX", seenBefore: false },
-  { id: "sh06", lang: "es", phrase: "¿Qué hora es ahora?",            translation: "What time is it now?",           phon: "ke o-ra es a-o-ra",                   speechLang: "es-MX", seenBefore: true  },
-  { id: "sh07", lang: "es", phrase: "No entiendo, ¿puedes repetir?",  translation: "I don't understand, can you repeat?", phon: "no en-tien-do, pwe-des re-pe-tir", speechLang: "es-MX", seenBefore: true  },
-  { id: "sh08", lang: "es", phrase: "Me gustaría un café, por favor", translation: "I'd like a coffee, please",      phon: "me ɡus-ta-ri-a un ka-fe, por fa-βor", speechLang: "es-MX", seenBefore: false },
-  { id: "sh09", lang: "es", phrase: "¿Dónde está el baño?",           translation: "Where is the bathroom?",         phon: "don-de es-ta el ba-ɲo",               speechLang: "es-MX", seenBefore: true  },
-  { id: "sh10", lang: "es", phrase: "Tengo hambre, ¿vamos a comer?",  translation: "I'm hungry, shall we go eat?",   phon: "ten-ɡo am-bre, ba-mos a ko-mer",      speechLang: "es-MX", seenBefore: true  },
+  // KOREAN PREVIEW. phrase = Hangul, phon = Revised Romanization, translation = English.
+  // seenBefore=false → 5 reps; true → 3 reps.
+  { id: "sh01", lang: "ko", phrase: "안녕하세요",                translation: "Hello",                          phon: "an-nyeong-ha-se-yo",            speechLang: "ko-KR", seenBefore: false },
+  { id: "sh02", lang: "ko", phrase: "만나서 반갑습니다",          translation: "Nice to meet you",               phon: "man-na-seo ban-gap-seum-ni-da", speechLang: "ko-KR", seenBefore: true  },
+  { id: "sh03", lang: "ko", phrase: "어디에서 왔어요?",          translation: "Where are you from?",            phon: "eo-di-e-seo wa-sseo-yo",        speechLang: "ko-KR", seenBefore: true  },
+  { id: "sh04", lang: "ko", phrase: "저는 미국에서 왔어요",       translation: "I'm from the United States",     phon: "jeo-neun mi-gug-e-seo wa-sseo-yo", speechLang: "ko-KR", seenBefore: true  },
+  { id: "sh05", lang: "ko", phrase: "한국어를 조금 해요",         translation: "I speak a little Korean",        phon: "han-gug-eo-reul jo-geum hae-yo", speechLang: "ko-KR", seenBefore: false },
+  { id: "sh06", lang: "ko", phrase: "지금 몇 시예요?",           translation: "What time is it now?",           phon: "ji-geum myeot si-ye-yo",        speechLang: "ko-KR", seenBefore: true  },
+  { id: "sh07", lang: "ko", phrase: "다시 말해 주세요",          translation: "Please say that again",          phon: "da-si mal-hae ju-se-yo",        speechLang: "ko-KR", seenBefore: true  },
+  { id: "sh08", lang: "ko", phrase: "커피 한 잔 주세요",         translation: "One coffee, please",             phon: "keo-pi han jan ju-se-yo",       speechLang: "ko-KR", seenBefore: false },
+  { id: "sh09", lang: "ko", phrase: "화장실이 어디예요?",        translation: "Where is the bathroom?",         phon: "hwa-jang-sir-i eo-di-ye-yo",    speechLang: "ko-KR", seenBefore: true  },
+  { id: "sh10", lang: "ko", phrase: "배고파요, 밥 먹으러 갈까요?", translation: "I'm hungry, shall we go eat?",   phon: "bae-go-pa-yo, bap meog-eu-reo gal-kka-yo", speechLang: "ko-KR", seenBefore: true  },
 ];
 
 // === DAILY RECALL — OPPONENT ROSTER (expanded for Phase 1) ===
@@ -1853,36 +1992,21 @@ const ROUNDS = [
 // when those run out the queue reaches for the next-soonest (smallest dueInDays)
 // future cards rather than repeating a card the user already nailed.
 const MOCK_CARDS = [
-  { es: "Me llamo Juan",              en: "My name is Juan",            dueInDays: -8, distractors: ["Me llama Juan", "Mi llamo Juan", "Soy llamo Juan"] },
-  { es: "¿Dónde está el baño?",       en: "Where is the bathroom?",     dueInDays: -7, distractors: ["¿Cuándo está el baño?", "¿Cómo es el baño?", "¿Quién está en el baño?"] },
-  { es: "Tengo hambre",               en: "I'm hungry",                 dueInDays: -6, distractors: ["Tengo sed", "Tengo sueño", "Tengo frío"] },
-  { es: "Hablo un poco de español",   en: "I speak a little Spanish",   dueInDays: -6, distractors: ["Hablo mucho español", "Hablas un poco español", "Habla un poco español"] },
-  { es: "¿Cuánto cuesta?",            en: "How much does it cost?",     dueInDays: -5, distractors: ["¿Cuántos cuestan?", "¿Cuánto costó?", "¿Qué cuesta?"] },
-  { es: "¿Qué hora es?",              en: "What time is it?",           dueInDays: -5, distractors: ["¿Qué hace?", "¿Cuál hora es?", "¿Dónde es la hora?"] },
-  { es: "No entiendo",                en: "I don't understand",         dueInDays: -4, distractors: ["No entiende", "No entiendes", "No entender"] },
-  { es: "¿Puedes ayudarme?",          en: "Can you help me?",           dueInDays: -4, distractors: ["¿Puedo ayudarte?", "¿Puede ayudarme?", "¿Ayúdame puedes?"] },
-  { es: "Estoy perdido",              en: "I'm lost",                   dueInDays: -3, distractors: ["Estás perdido", "Estoy perdiendo", "Soy perdido"] },
-  { es: "Quiero un café",             en: "I want a coffee",            dueInDays: -3, distractors: ["Quieres un café", "Quiero una café", "Quería un café"] },
-  { es: "¿Hablas inglés?",            en: "Do you speak English?",      dueInDays: -2, distractors: ["¿Hablo inglés?", "¿Habla inglés?", "¿Hablas inglesa?"] },
-  { es: "Me gusta mucho",             en: "I like it a lot",            dueInDays: -2, distractors: ["Me gustan mucho", "Te gusta mucho", "Me gustaría mucho"] },
-  { es: "¿Dónde vives?",              en: "Where do you live?",         dueInDays: -1, distractors: ["¿Dónde vive?", "¿Cuándo vives?", "¿Dónde vivo?"] },
-  { es: "Tengo dos hermanos",         en: "I have two brothers",        dueInDays: -1, distractors: ["Tengo dos hermanas", "Tienes dos hermanos", "Tengo dos hermano"] },
-  { es: "Hace mucho calor",           en: "It's very hot",              dueInDays: 0,  distractors: ["Hace mucho frío", "Hago mucho calor", "Hace mucha calor"] },
-  { es: "Necesito un médico",         en: "I need a doctor",            dueInDays: 0,  distractors: ["Necesitas un médico", "Necesito una médico", "Necesité un médico"] },
-  { es: "¿Cómo te llamas?",           en: "What's your name?",          dueInDays: 1,  distractors: ["¿Cómo me llamo?", "¿Cómo se llama?", "¿Cómo te llama?"] },
-  { es: "Estoy cansado",              en: "I'm tired",                  dueInDays: 1,  distractors: ["Estás cansado", "Estoy casado", "Soy cansado"] },
-  { es: "¿Qué quieres comer?",        en: "What do you want to eat?",   dueInDays: 2,  distractors: ["¿Qué quiero comer?", "¿Qué quieres comprar?", "¿Qué quiere comer?"] },
-  { es: "La cuenta, por favor",       en: "The check, please",          dueInDays: 2,  distractors: ["La cuenta, por favores", "El cuento, por favor", "La cuenta, gracias"] },
-  { es: "Me duele la cabeza",         en: "My head hurts",              dueInDays: 3,  distractors: ["Me duele el cabeza", "Te duele la cabeza", "Me duelen la cabeza"] },
-  { es: "¿Dónde está la estación?",   en: "Where is the station?",      dueInDays: 4,  distractors: ["¿Dónde es la estación?", "¿Cuándo está la estación?", "¿Dónde está el estación?"] },
-  { es: "Tengo una pregunta",         en: "I have a question",          dueInDays: 5,  distractors: ["Tengo un pregunta", "Tienes una pregunta", "Tengo una preguntar"] },
-  { es: "¿Puedo pagar con tarjeta?",  en: "Can I pay by card?",         dueInDays: 6,  distractors: ["¿Puedes pagar con tarjeta?", "¿Puedo pagar con tarjetas?", "¿Pago puedo con tarjeta?"] },
-  { es: "Vamos a la playa",           en: "Let's go to the beach",      dueInDays: 7,  distractors: ["Vamos a el playa", "Vamos a la playas", "Vames a la playa"] },
-  { es: "¿A qué hora abre?",          en: "What time does it open?",    dueInDays: 9,  distractors: ["¿A qué hora abres?", "¿A qué hora abrir?", "¿De qué hora abre?"] },
-  { es: "Estoy aprendiendo español",  en: "I'm learning Spanish",       dueInDays: 11, distractors: ["Estás aprendiendo español", "Estoy aprendido español", "Soy aprendiendo español"] },
-  { es: "¿Me puedes recomendar algo?",en: "Can you recommend something?",dueInDays: 13,distractors: ["¿Me puedo recomendar algo?", "¿Te puedes recomendar algo?", "¿Me puedes recomendar algos?"] },
-  { es: "Hace mucho frío hoy",        en: "It's very cold today",       dueInDays: 15, distractors: ["Hace mucho calor hoy", "Hago mucho frío hoy", "Hace mucha frío hoy"] },
-  { es: "Nos vemos mañana",           en: "See you tomorrow",           dueInDays: 18, distractors: ["Nos vemos mañanas", "Te vemos mañana", "Nos vimos mañana"] },
+  // KOREAN PREVIEW. `es` holds the displayed phrase (Hangul) — kept as the key the
+  // card UI already reads; `roman` is the romanization shown beneath it; distractors
+  // are plausible-but-wrong Korean options for the "produce" phase.
+  { es: "제 이름은 후안이에요",   roman: "je i-reum-eun hu-an-i-e-yo",   en: "My name is Juan",          dueInDays: -8, distractors: ["제 이름을 후안이에요", "저 이름은 후안이에요", "제 이름이 후안이세요"] },
+  { es: "화장실이 어디예요?",     roman: "hwa-jang-sir-i eo-di-ye-yo",   en: "Where is the bathroom?",   dueInDays: -7, distractors: ["화장실이 언제예요?", "화장실을 어디예요?", "화장실이 어디할까요?"] },
+  { es: "배고파요",              roman: "bae-go-pa-yo",                 en: "I'm hungry",               dueInDays: -6, distractors: ["목말라요", "졸려요", "추워요"] },
+  { es: "한국어를 조금 해요",     roman: "han-gug-eo-reul jo-geum hae-yo", en: "I speak a little Korean", dueInDays: -6, distractors: ["한국어를 많이 해요", "한국어가 조금 해요", "한국어를 조금 있어요"] },
+  { es: "얼마예요?",             roman: "eol-ma-ye-yo",                 en: "How much is it?",          dueInDays: -5, distractors: ["어디예요?", "언제예요?", "누구예요?"] },
+  { es: "몇 시예요?",            roman: "myeot si-ye-yo",               en: "What time is it?",         dueInDays: -5, distractors: ["몇 개예요?", "무슨 시예요?", "몇 시할래요?"] },
+  { es: "이해 못 했어요",         roman: "i-hae mot hae-sseo-yo",        en: "I don't understand",       dueInDays: -4, distractors: ["이해 했어요", "이해 안 먹었어요", "이해 못 갔어요"] },
+  { es: "도와줄 수 있어요?",      roman: "do-wa-jul su i-sseo-yo",       en: "Can you help me?",         dueInDays: -4, distractors: ["도와줄 수 없어요?", "도와줄 거 있어요?", "도와주고 있어요?"] },
+  { es: "커피 주세요",           roman: "keo-pi ju-se-yo",              en: "A coffee, please",         dueInDays: -3, distractors: ["커피 주셨어요", "커피가 주세요", "커피 줄까요"] },
+  { es: "영어 할 줄 알아요?",     roman: "yeong-eo hal jul ar-a-yo",     en: "Do you speak English?",    dueInDays: -2, distractors: ["영어 할 줄 몰라요?", "영어 할 수 알아요?", "영어 하고 알아요?"] },
+  { es: "어디에 살아요?",         roman: "eo-di-e sar-a-yo",             en: "Where do you live?",       dueInDays: -1, distractors: ["어디에 가요?", "어디에 살았어요?", "어디에서 살까요?"] },
+  { es: "만나서 반가워요",        roman: "man-na-seo ban-ga-wo-yo",      en: "Nice to meet you",         dueInDays: 2,  distractors: ["만나서 반가웠어요", "만나서 고마워요", "만나고 반가워요"] },
 ];
 
 // Card indices that are DUE for review (dueInDays <= 0), sorted soonest-first
@@ -2763,7 +2887,7 @@ const TypedPvpPlay = ({ cards, rival, me, onFinish, onBack }) => {
     if (feedback !== null || over || intro || !input.trim()) return;
     // Accept the native-script answer OR its romanization (for languages with
     // their own alphabet). Lenient on case/accents/punctuation via answerMatches.
-    const correct = answerMatches(input, [expected, card?.romanization]);
+    const correct = answerMatches(input, [expected, card?.roman, card?.romanization]);
     setPeek(false);
 
     if (correct) {
@@ -3032,6 +3156,7 @@ const TypedPvpPlay = ({ cards, rival, me, onFinish, onBack }) => {
           {(feedback === "wrong" || (peek && !feedback)) && (
             <div className="mt-0.5 font-body font-bold" style={{ fontSize: 12, color: feedback === "wrong" ? "rgba(255,255,255,0.92)" : "rgba(122,74,26,0.7)" }}>
               {peek && !feedback ? "👁 " : "Answer: "}<span className="font-display font-bold">{expected}</span>
+              {card?.roman && <span className="font-body italic" style={{ fontWeight: 600, marginLeft: 6, opacity: 0.85 }}>/{card.roman}/</span>}
             </div>
           )}
         </div>
@@ -3135,6 +3260,13 @@ const PvpResultScreen = ({ result, rival, updatedRecord, coinsEarned = 0, onCont
     } catch (e) {}
     return () => { try { ctx && ctx.close(); } catch (e) {} };
   }, [won]);
+
+  // Coin reward sound — fires when the coin count-up finishes (~delay + dur).
+  useEffect(() => {
+    if (coinsEarned <= 0) return;
+    const t = setTimeout(() => playSound("coins"), 950 + 1200);
+    return () => clearTimeout(t);
+  }, [coinsEarned]);
 
   // ---------- VICTORY ----------
   if (won) {
@@ -3430,7 +3562,7 @@ const MatchesHub = ({ onChallenge, onBack, rivalries = FRIEND_RIVALRIES }) => (
 // honor system. The fight (lunge, damage, HP drain) resolves AFTER
 // the self-grade. The card is sacred; the arena reacts to it.
 // ============================================================
-const InSparPlay = ({ onKO, onTimeOut, onYourKO, onEnd, onPause, resumeFrom, opponents = [MIKE], me = ME }) => {
+const InSparPlay = ({ onKO, onTimeOut, onYourKO, onEnd, onPause, resumeFrom, opponents = [MIKE], me = ME, lang = "es" }) => {
   // === MULTI-OPPONENT SUPPORT (Phase 2 — DYNAMIC) ===
   // The initial `opponents` prop is the baseline lineup (3 for solo Recall,
   // 1 for friend Spar). We mirror it as state so we can PUSH extra rivals if
@@ -3499,6 +3631,19 @@ const InSparPlay = ({ onKO, onTimeOut, onYourKO, onEnd, onPause, resumeFrom, opp
   // → 0 → 1 (card un-squishes with the new face).
   // Looks like a real flip, works everywhere.
   const [flipScale, setFlipScale] = useState(1);
+  // Speak the phrase aloud in the active language's voice (slowed for clarity).
+  const speakPhrase = (text) => {
+    if (typeof window === "undefined" || !window.speechSynthesis || !text) return;
+    const localeMap = { es: "es-MX", fr: "fr-FR", ja: "ja-JP", zh: "zh-CN", ko: "ko-KR", it: "it-IT", en: "en-US", de: "de-DE", pt: "pt-BR", ar: "ar-SA" };
+    try {
+      const utter = new window.SpeechSynthesisUtterance(text);
+      utter.lang = localeMap[lang] || "es-MX";
+      utter.rate = 0.9;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utter);
+    } catch (e) {}
+  };
+
   const flipCard = () => {
     if (flipped || drag.dragging || flipScale !== 1) return;
     const half = combo >= 8 ? 140 : 250;
@@ -3506,18 +3651,11 @@ const InSparPlay = ({ onKO, onTimeOut, onYourKO, onEnd, onPause, resumeFrom, opp
     setTimeout(() => {
       setFlipped(true);
       setFlipScale(1);
-      // === AUTO-PLAY SPANISH PHRASE on flip ===
-      // Native audio fires as soon as the answer is visible, so the user
-      // can hear the phrase while they're processing whether they knew it.
-      try {
-        if (typeof window !== "undefined" && window.speechSynthesis && card.es) {
-          const utter = new window.SpeechSynthesisUtterance(card.es);
-          utter.lang = "es-MX";
-          utter.rate = 0.9;
-          window.speechSynthesis.cancel();
-          window.speechSynthesis.speak(utter);
-        }
-      } catch (e) {}
+      // Auto-play the Korean phrase when the flip REVEALS the Korean side.
+      // Phase 2 (production): the back is the Korean answer → speak on flip.
+      // Phase 1 (recognition): the Korean is on the FRONT, so it's spoken when
+      // the card first appears (see the card-appear effect), not here.
+      if (card.phase === 2) speakPhrase(card.es);
     }, half);
   };
   const [drag, setDrag] = useState({ x: 0, startX: 0, dragging: false });
@@ -3637,6 +3775,14 @@ const InSparPlay = ({ onKO, onTimeOut, onYourKO, onEnd, onPause, resumeFrom, opp
   const [correctCount, setCorrectCount] = useState(resumeFrom?.correctCount ?? 0);
   const card = MOCK_CARDS[currentCardKey];
   const myAbilities = abilitiesForBelt(me.belt, "spar");
+
+  // When a new card appears, auto-play the Korean if it's the FRONT side
+  // (phase 1 = recognition, where the Korean phrase is the prompt). For phase 2
+  // the front is the English prompt and the Korean is spoken on flip instead.
+  useEffect(() => {
+    if (card && card.phase === 1) speakPhrase(card.es);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentCardKey]);
 
   // === PHASE 5 — OPPONENT AI ===
   // Opponents do NOT attack on a random timer. Pedagogically, this app's
@@ -5189,7 +5335,11 @@ const InSparPlay = ({ onKO, onTimeOut, onYourKO, onEnd, onPause, resumeFrom, opp
             }}
           >
             <div
-              onClick={() => { if (!flipped && !drag.dragging) flipCard(); }}
+              onClick={() => {
+                if (drag.dragging) return;
+                if (!flipped) flipCard();          // first tap reveals the answer
+                else speakPhrase(card.es);          // tap again to replay the audio
+              }}
               className="relative w-full h-full"
               style={{
                 // 2D scaleX flip — the card collapses to a vertical line at the
@@ -5270,6 +5420,9 @@ const InSparPlay = ({ onKO, onTimeOut, onYourKO, onEnd, onPause, resumeFrom, opp
                       }}>
                         {card.phase === 1 ? card.es : card.en}
                       </div>
+                      {card.phase === 1 && card.roman && (
+                        <div className="font-body italic text-center" style={{ fontSize: 13, color: "rgba(122,74,26,0.62)", marginTop: 5 }}>/{card.roman}/</div>
+                      )}
                     </div>
                   </div>
 
@@ -5361,6 +5514,9 @@ const InSparPlay = ({ onKO, onTimeOut, onYourKO, onEnd, onPause, resumeFrom, opp
                     }}>
                       {card.phase === 1 ? card.en : card.es}
                     </div>
+                    {card.phase === 2 && card.roman && (
+                      <div className="font-body italic text-center" style={{ fontSize: 13, color: "rgba(122,74,26,0.62)", marginTop: 5 }}>/{card.roman}/</div>
+                    )}
                   </div>
 
                   {/* Directional swipe hint — left=forgot, right=got it.
@@ -6055,7 +6211,7 @@ const RecallResult = ({
     return () => clearTimeout(t);
   }, []);
   useEffect(() => {
-    const t = setTimeout(() => setCoinsLanded(true), 1100 + 1100);
+    const t = setTimeout(() => { setCoinsLanded(true); if (coinsEarned > 0) playSound("coins"); }, 1100 + 1100);
     return () => clearTimeout(t);
   }, []);
 
@@ -8473,7 +8629,41 @@ export default function YourPhrasesFlow() {
   const [pufflingName, setPufflingName] = useState("Pip");
   // The language the user is currently focused on (drives the fluency pill +
   // phrasebook). Switched from the language picker that opens off the pill.
-  const [activeLang, setActiveLang] = useState("es");
+  const [activeLang, setActiveLang] = useState("ko");
+
+  // Global UI sound. One capture-phase listener covers every button / .tactile
+  // element in the app (so we don't touch hundreds of onClick handlers), and
+  // capture means it still fires for handlers that stopPropagation. The sound is
+  // chosen by an explicit data-sound="<slug>" attribute if present, otherwise
+  // inferred from the button's label. Add data-mute-sound to opt an element out
+  // (used where logic plays its own contextual sound, e.g. the flashcard grade
+  // buttons). Real clips are pre-decoded on first interaction; synth is fallback.
+  useEffect(() => {
+    preloadSounds();
+    const onTap = (e) => {
+      const t = e.target;
+      if (!t || !t.closest) return;
+      const el = t.closest("button, .tactile, [role='button']");
+      if (!el || el.disabled || el.getAttribute("aria-disabled") === "true") return;
+      if (el.closest("[data-mute-sound]")) return;
+      // Explicit override wins.
+      const explicit = el.closest("[data-sound]");
+      if (explicit) { playSound(explicit.getAttribute("data-sound")); return; }
+      // Otherwise infer the sound from the label text.
+      const label = (el.getAttribute("aria-label") || el.textContent || "").trim().toLowerCase();
+      let slug = "click";
+      if (label.includes("start training") || label.includes("let's go")) slug = "start-training";
+      else if (label.includes("phrasebook")) slug = "phrasebook";
+      // "Back to Training" is a FORWARD action despite starting with "back".
+      else if (label.includes("back to training") || label.includes("keep going")) slug = "continue";
+      else if (label === "←" || label.startsWith("back")) slug = "back";
+      else if (label === "✕" || label === "×" || label === "✖") slug = "close";
+      else if (label.includes("continue")) slug = "continue";
+      playSound(slug);
+    };
+    document.addEventListener("click", onTap, true);
+    return () => document.removeEventListener("click", onTap, true);
+  }, []);
   const [langSwitcherOpen, setLangSwitcherOpen] = useState(false);
   // Phrases the user has imported from another language (lives app-wide so the
   // phrasebook can show them). The import flow is launched from the Your
@@ -9311,6 +9501,7 @@ export default function YourPhrasesFlow() {
         ? pickInterstitial(qIdx + 1, phaseTotal)  // qIdx+1 = the question they just FINISHED
         : null;
       if (variant) {
+        playSound("progress");
         setInterstitial(variant);
         const duration = variant === "last" ? 1600 : 1000;
         setTimeout(() => {
@@ -9414,6 +9605,7 @@ export default function YourPhrasesFlow() {
     if (qIdx < total - 1) {
       const variant = pickInterstitial(qIdx + 1, total);
       if (variant) {
+        playSound("progress");
         setInterstitial(variant);
         const duration = variant === "last" ? 1600 : 1000;
         setTimeout(() => {
@@ -9513,26 +9705,26 @@ export default function YourPhrasesFlow() {
   const [fiveKAssociations, setFiveKAssociations] = useState({}); // {wordIdx: "association text"}
   // Demo word bank — in production, comes from backend frequency list
   const fiveKWordBank = [
-    { en: "what",  trans: "¿qué?",  region: "ES-MX", example: "What is that?" },
-    { en: "go",    trans: "ir",     region: "ES-MX", example: "Let's go now." },
-    { en: "their", trans: "su",     region: "ES-MX", example: "This is their room." },
-    { en: "make",  trans: "hacer",  region: "ES-MX", example: "I'll make dinner." },
-    { en: "want",  trans: "querer", region: "ES-MX", example: "I want coffee." },
-    { en: "know",  trans: "saber",  region: "ES-MX", example: "I don't know yet." },
-    { en: "take",  trans: "tomar",  region: "ES-MX", example: "Take this with you." },
-    { en: "see",   trans: "ver",    region: "ES-MX", example: "Can you see it?" },
-    { en: "come",  trans: "venir",  region: "ES-MX", example: "Come here, please." },
-    { en: "think", trans: "pensar", region: "ES-MX", example: "I'll think about it." },
-    { en: "find",  trans: "encontrar", region: "ES-MX", example: "Did you find it?" },
-    { en: "give",  trans: "dar",    region: "ES-MX", example: "Give it to me." },
-    { en: "tell",  trans: "decir",  region: "ES-MX", example: "Tell me everything." },
-    { en: "work",  trans: "trabajar", region: "ES-MX", example: "I work on Mondays." },
-    { en: "call",  trans: "llamar", region: "ES-MX", example: "Call me tonight." },
-    { en: "try",   trans: "intentar", region: "ES-MX", example: "Just try once." },
-    { en: "ask",   trans: "preguntar", region: "ES-MX", example: "Ask the waiter." },
-    { en: "feel",  trans: "sentir", region: "ES-MX", example: "How do you feel?" },
-    { en: "leave", trans: "salir",  region: "ES-MX", example: "We leave at six." },
-    { en: "stay",  trans: "quedarse", region: "ES-MX", example: "Stay a little longer." },
+    { en: "what",  trans: "무엇",     roman: "mu-eot",        region: "KO-KR", example: "What is that?" },
+    { en: "go",    trans: "가다",     roman: "ga-da",         region: "KO-KR", example: "Let's go now." },
+    { en: "their", trans: "그들의",   roman: "geu-deur-ui",   region: "KO-KR", example: "This is their room." },
+    { en: "make",  trans: "만들다",   roman: "man-deul-da",   region: "KO-KR", example: "I'll make dinner." },
+    { en: "want",  trans: "원하다",   roman: "won-ha-da",     region: "KO-KR", example: "I want coffee." },
+    { en: "know",  trans: "알다",     roman: "al-da",         region: "KO-KR", example: "I don't know yet." },
+    { en: "take",  trans: "가지다",   roman: "ga-ji-da",      region: "KO-KR", example: "Take this with you." },
+    { en: "see",   trans: "보다",     roman: "bo-da",         region: "KO-KR", example: "Can you see it?" },
+    { en: "come",  trans: "오다",     roman: "o-da",          region: "KO-KR", example: "Come here, please." },
+    { en: "think", trans: "생각하다", roman: "saeng-gak-ha-da", region: "KO-KR", example: "I'll think about it." },
+    { en: "find",  trans: "찾다",     roman: "chat-da",       region: "KO-KR", example: "Did you find it?" },
+    { en: "give",  trans: "주다",     roman: "ju-da",         region: "KO-KR", example: "Give it to me." },
+    { en: "tell",  trans: "말하다",   roman: "mal-ha-da",     region: "KO-KR", example: "Tell me everything." },
+    { en: "work",  trans: "일하다",   roman: "il-ha-da",      region: "KO-KR", example: "I work on Mondays." },
+    { en: "call",  trans: "부르다",   roman: "bu-reu-da",     region: "KO-KR", example: "Call me tonight." },
+    { en: "try",   trans: "시도하다", roman: "si-do-ha-da",   region: "KO-KR", example: "Just try once." },
+    { en: "ask",   trans: "묻다",     roman: "mut-da",        region: "KO-KR", example: "Ask the waiter." },
+    { en: "feel",  trans: "느끼다",   roman: "neu-kki-da",    region: "KO-KR", example: "How do you feel?" },
+    { en: "leave", trans: "떠나다",   roman: "tteo-na-da",    region: "KO-KR", example: "We leave at six." },
+    { en: "stay",  trans: "머무르다", roman: "meo-mu-reu-da", region: "KO-KR", example: "Stay a little longer." },
   ];
   // The active session is a slice of the bank from current lifetime count forward
   const fiveKLifetime = dailyModules.find((m) => m.id === "fiveK")?.lifetime || 0;
@@ -9554,13 +9746,13 @@ export default function YourPhrasesFlow() {
   const [wordSchedule, setWordSchedule] = useState(() => {
     const now = Date.now();
     return [
-      { id: "casa",    en: "house",  trans: "casa",    region: "ES-MX", hook: "CASA → 'Casablanca', a famous white house",            stage: 2, dueAt: now - 1.0 * DAY_MS, lastReviewedAt: now - 8 * DAY_MS },
-      { id: "agua",    en: "water",  trans: "agua",    region: "ES-MX", hook: "AGUA → someone yells 'ah-gwah!' cannonballing in",     stage: 1, dueAt: now - 2.0 * DAY_MS, lastReviewedAt: now - 6 * DAY_MS },
-      { id: "amigo",   en: "friend", trans: "amigo",   region: "ES-MX", hook: "AMIGO → 'a-me-go' everywhere together, like friends",  stage: 3, dueAt: now - 0.5 * DAY_MS, lastReviewedAt: now - 9 * DAY_MS },
-      { id: "tiempo",  en: "time",   trans: "tiempo",  region: "ES-MX", hook: "TIEMPO → the 'tempo' of a song keeps time",            stage: 1, dueAt: now - 3.0 * DAY_MS, lastReviewedAt: now - 7 * DAY_MS },
-      { id: "comida",  en: "food",   trans: "comida",  region: "ES-MX", hook: "COMIDA → 'come-eat-a' meal",                            stage: 0, dueAt: now - 1.0 * DAY_MS, lastReviewedAt: now - 2 * DAY_MS },
+      { id: "house",  en: "house",  trans: "집",     roman: "jip",      region: "KO-KR", hook: "집 (jip) → a JEEP parked outside your HOUSE.",                 stage: 2, dueAt: now - 1.0 * DAY_MS, lastReviewedAt: now - 8 * DAY_MS },
+      { id: "water",  en: "water",  trans: "물",     roman: "mul",      region: "KO-KR", hook: "물 (mul) → a 'MOO'-cow gulps down WATER.",                     stage: 1, dueAt: now - 2.0 * DAY_MS, lastReviewedAt: now - 6 * DAY_MS },
+      { id: "friend", en: "friend", trans: "친구",    roman: "chin-gu",  region: "KO-KR", hook: "친구 (chin-gu) → a FRIEND chucks you on the CHIN, all goo-ey.", stage: 3, dueAt: now - 0.5 * DAY_MS, lastReviewedAt: now - 9 * DAY_MS },
+      { id: "time",   en: "time",   trans: "시간",    roman: "si-gan",   region: "KO-KR", hook: "시간 (si-gan) → 'SEE-gone' — TIME, once you SEE it, it's GONE.", stage: 1, dueAt: now - 3.0 * DAY_MS, lastReviewedAt: now - 7 * DAY_MS },
+      { id: "food",   en: "food",   trans: "음식",    roman: "eum-sik",  region: "KO-KR", hook: "음식 (eum-sik) → 'um, SEEK' — you SEEK something to eat.",      stage: 0, dueAt: now - 1.0 * DAY_MS, lastReviewedAt: now - 2 * DAY_MS },
       // Scheduled into the future — NOT due yet, so it won't appear today.
-      { id: "trabajo", en: "job",    trans: "trabajo", region: "ES-MX", hook: null,                                                    stage: 4, dueAt: now + 20 * DAY_MS, lastReviewedAt: now - 4 * DAY_MS },
+      { id: "job",    en: "job",    trans: "직업",    roman: "jig-eop",  region: "KO-KR", hook: null,                                                          stage: 4, dueAt: now + 20 * DAY_MS, lastReviewedAt: now - 4 * DAY_MS },
     ];
   });
 
@@ -9681,62 +9873,54 @@ export default function YourPhrasesFlow() {
   const pronunciationPhrases = [
     {
       words: [
-        { text: "No",         phon: "no" },
-        { text: "me",         phon: "me" },
-        { text: "gusta",      phon: "ɡus-ta" },
-        { text: "acostarme",  phon: "a-kos-tar-me" },
-        { text: "demasiado",  phon: "de-ma-sia-do" },
-        { text: "tarde.",     phon: "tar-de" },
+        { text: "안녕하세요",  phon: "an-nyeong-ha-se-yo" },
+        { text: "만나서",      phon: "man-na-seo" },
+        { text: "반갑습니다.",  phon: "ban-gap-seum-ni-da" },
       ],
-      en: "I don't like going to bed too late.",
-      region: "ES-MX",
+      en: "Hello, nice to meet you.",
+      region: "KO-KR",
     },
     {
       words: [
-        { text: "¿Dónde",  phon: "don-de" },
-        { text: "está",    phon: "es-ta" },
-        { text: "el",      phon: "el" },
-        { text: "baño?",   phon: "ba-ɲo" },
+        { text: "화장실이",   phon: "hwa-jang-sir-i" },
+        { text: "어디예요?",  phon: "eo-di-ye-yo" },
       ],
       en: "Where is the bathroom?",
-      region: "ES-MX",
+      region: "KO-KR",
     },
     {
       words: [
-        { text: "Me",      phon: "me" },
-        { text: "llamo",   phon: "ya-mo" },
-        { text: "Juan.",   phon: "xwan" },
+        { text: "제",        phon: "je" },
+        { text: "이름은",     phon: "i-reum-eun" },
+        { text: "후안이에요.", phon: "hu-an-i-e-yo" },
       ],
       en: "My name is Juan.",
-      region: "ES-MX",
+      region: "KO-KR",
     },
     {
       words: [
-        { text: "¿Cuánto", phon: "kwan-to" },
-        { text: "cuesta?", phon: "kwes-ta" },
+        { text: "얼마",   phon: "eol-ma" },
+        { text: "예요?",  phon: "ye-yo" },
       ],
-      en: "How much does it cost?",
-      region: "ES-MX",
+      en: "How much is it?",
+      region: "KO-KR",
     },
     {
       words: [
-        { text: "Tengo",   phon: "ten-go" },
-        { text: "mucha",   phon: "mu-cha" },
-        { text: "hambre.", phon: "am-bre" },
+        { text: "너무",     phon: "neo-mu" },
+        { text: "배고파요.", phon: "bae-go-pa-yo" },
       ],
       en: "I'm very hungry.",
-      region: "ES-MX",
+      region: "KO-KR",
     },
     {
       words: [
-        { text: "Hablo",       phon: "a-blo" },
-        { text: "un",          phon: "un" },
-        { text: "poco",        phon: "po-ko" },
-        { text: "de",          phon: "de" },
-        { text: "español.",    phon: "es-pa-ɲol" },
+        { text: "한국어를", phon: "han-gug-eo-reul" },
+        { text: "조금",     phon: "jo-geum" },
+        { text: "해요.",    phon: "hae-yo" },
       ],
-      en: "I speak a little Spanish.",
-      region: "ES-MX",
+      en: "I speak a little Korean.",
+      region: "KO-KR",
     },
   ];
 
@@ -10775,6 +10959,7 @@ export default function YourPhrasesFlow() {
             <InSparPlay
               opponents={freeDuelOpponents}
               me={playerMe}
+              lang={activeLang}
               resumeFrom={null}
               onPause={() => setScreen("dojoHall")}
               onKO={({ myHp, theirHp, cardCount, distinctCards, kos, maxCombo, correctCount, facedOpponents }) => {
@@ -11099,6 +11284,7 @@ export default function YourPhrasesFlow() {
             <InSparPlay
               opponents={recallLineup}
               me={playerMe}
+              lang={activeLang}
               resumeFrom={pausedRecallState}
               onPause={(snapshot) => {
                 // User tapped ✕ → confirmed pause. Save the full battle state
@@ -15192,7 +15378,7 @@ const FiveKWordScreen = ({ word, wordIdx, total, deckCount, onNext, onBack }) =>
     try {
       if (typeof window !== "undefined" && window.speechSynthesis) {
         const utter = new window.SpeechSynthesisUtterance(word.trans);
-        const localeMap = { "ES-MX": "es-MX", "ES-ES": "es-ES", "FR-FR": "fr-FR", "DE-DE": "de-DE", "IT-IT": "it-IT", "PT-BR": "pt-BR", "JA-JP": "ja-JP" };
+        const localeMap = { "ES-MX": "es-MX", "ES-ES": "es-ES", "FR-FR": "fr-FR", "DE-DE": "de-DE", "IT-IT": "it-IT", "PT-BR": "pt-BR", "JA-JP": "ja-JP", "KO-KR": "ko-KR" };
         utter.lang = localeMap[word.region] || "es-MX";
         utter.rate = 0.9;
         utter.onend = () => setPlaying(false);
@@ -15238,26 +15424,26 @@ const FiveKWordScreen = ({ word, wordIdx, total, deckCount, onNext, onBack }) =>
 
   // AI-generated association fillers — covers the full 20-word demo bank
   const aiSuggestions = {
-    "what":  "Picture a wedge of cheese yelling '¿qué-so?!' — 'what so?' It's the cheesiest question ever.",
-    "go":    "Imagine an EAR running off — 'ir' (sounds like start of 'ear') is going somewhere fast.",
-    "their": "A 'su-per' family next door — 'su' is everything that's theirs: their dog, their car, their snacks.",
-    "make":  "You can 'hacer' brownies — picture a HACKER making (hacer) cookies in a kitchen lab.",
-    "want":  "QUERER → 'care-air' — I CARE about that AIR-conditioned room, I WANT it.",
-    "know":  "SABER → like a SABER sword — when you KNOW something, you wield it sharply.",
-    "take":  "TOMAR → 'toe-mar' — picture marking your TOE with a stamp — you TAKE the stamp with you.",
-    "see":   "VER → like a magic VR headset — put it on to SEE a whole new world.",
-    "come":  "VENIR → 'vee-near' — when someone says 'come', they want you near, VERY near.",
-    "think": "PENSAR → picture a PEN that SAYS your thoughts out loud as you THINK.",
-    "find":  "ENCONTRAR → 'in-CON-trar' — you FIND a CON artist in a TRAP. Got 'em!",
-    "give":  "DAR → like 'darling' — when you GIVE something, you say 'here, darling'.",
-    "tell":  "DECIR → 'day-seer' — every DAY a SEER tells you the future.",
-    "work":  "TRABAJAR → like 'travail' — WORK is travail, French for hard labor.",
-    "call":  "LLAMAR → 'ya-MAR' — you CALL out 'YAH! Mar!' across the sea (mar = sea).",
-    "try":   "INTENTAR → 'in-TENT-ar' — you TRY to set up a TENT in the rain.",
-    "ask":   "PREGUNTAR → 'pre-GUN-tar' — before the GUN goes off, you ASK the question.",
-    "feel":  "SENTIR → 'sent-EAR' — what you SENSE with your EARS — you FEEL the vibes.",
-    "leave": "SALIR → 'sa-LEER' — you take a SLY LEER over your shoulder as you LEAVE.",
-    "stay":  "QUEDARSE → 'kay-DARSE' — say 'OK, DAR-ling, stay a bit longer'.",
+    "what":  "무엇 (mu-eot) → a cow says 'MOO… WHAT?' when it's confused. Moo-eot = what?",
+    "go":    "가다 (ga-da) → 'GOTTA!' — you GOTTA GO. Gah-da, let's go.",
+    "their": "그들의 (geu-deul-ui) → 'GOOD-DEAL' — THEIR stuff is always a good deal.",
+    "make":  "만들다 (man-deul-da) → a MAN at a DELL desk MAKES a laptop. Man-deul.",
+    "want":  "원하다 (won-ha-da) → you WON the lottery (₩ won) — now you WANT everything.",
+    "know":  "알다 (al-da) → 'ALL-da' — AL knows it ALL. To KNOW = al-da.",
+    "take":  "가지다 (ga-ji-da) → 'gah-GEE' — 'Gee, I'll TAKE that gadget!' as you grab it.",
+    "see":   "보다 (bo-da) → 'BO-da' — press play and BEHOLD: you SEE the video.",
+    "come":  "오다 (o-da) → 'OH-da' — 'Oh, da bus is here — COME on!'",
+    "think": "생각하다 (saeng-gak-ha-da) → 'sang-GAWK' — you THINK so hard you SANG and GAWKED.",
+    "find":  "찾다 (chat-da) → you CHAT to FIND the answer — 'let's chat-da till we find it.'",
+    "give":  "주다 (ju-da) → 'JU-da' — 'here, I'll GIVE ya some juice.'",
+    "tell":  "말하다 (mal-ha-da) → at the MALL, HA! you TELL everyone the news.",
+    "work":  "일하다 (il-ha-da) → 'ILL? HA!' — even when you're ILL you HA-ve to WORK.",
+    "call":  "부르다 (bu-reu-da) → 'BOO-roo' — you CALL out 'BOO!' to a kanga-ROO.",
+    "try":   "시도하다 (si-do-ha-da) → 'SEE-dough' — you TRY to see if the DOUGH rises.",
+    "ask":   "묻다 (mut-da) → 'MUTT-da' — the MUTT tilts its head when you ASK it something.",
+    "feel":  "느끼다 (neu-kki-da) → 'NU-key' — you FEEL around for the NEW KEY in your pocket.",
+    "leave": "떠나다 (tteo-na-da) → 'tuh-NA' — 'ta-ta now!' you wave as you LEAVE.",
+    "stay":  "머무르다 (meo-mu-reu-da) → 'maw-MOO' — the cow (moo) won't budge — it wants to STAY.",
   };
   const generateAI = () => {
     const fallback = `Imagine the word "${word.en}" appearing in the sky as you say "${word.trans}" out loud.`;
@@ -15453,6 +15639,12 @@ const FiveKWordScreen = ({ word, wordIdx, total, deckCount, onNext, onBack }) =>
                   </span>
                 </div>
 
+                {/* Romanization */}
+                {word.roman && (
+                  <div className="font-body italic mt-2" style={{ fontSize: 15, color: "rgba(14,92,112,0.72)" }}>
+                    /{word.roman}/
+                  </div>
+                )}
                 {/* Tap-to-hear discovery hint */}
                 <div
                   className="font-display font-semibold mt-1.5"
@@ -15804,7 +15996,7 @@ const FiveKReviewScreen = ({ initialQueue, onComplete, onBack }) => {
     try {
       if (typeof window !== "undefined" && window.speechSynthesis) {
         const utter = new window.SpeechSynthesisUtterance(item.trans);
-        const localeMap = { "ES-MX": "es-MX", "ES-ES": "es-ES", "FR-FR": "fr-FR", "DE-DE": "de-DE", "IT-IT": "it-IT", "PT-BR": "pt-BR", "JA-JP": "ja-JP" };
+        const localeMap = { "ES-MX": "es-MX", "ES-ES": "es-ES", "FR-FR": "fr-FR", "DE-DE": "de-DE", "IT-IT": "it-IT", "PT-BR": "pt-BR", "JA-JP": "ja-JP", "KO-KR": "ko-KR" };
         utter.lang = localeMap[item.region] || "es-MX";
         utter.rate = 0.9;
         utter.onend = () => setPlaying(false);
@@ -15830,6 +16022,7 @@ const FiveKReviewScreen = ({ initialQueue, onComplete, onBack }) => {
   };
 
   const grade = (knew) => {
+    playSound(knew ? "flash-correct" : "flash-wrong");
     setResult(knew ? "knew" : "forgot");
     // Record the FIRST attempt for this word only (drives scheduling).
     if (item && !(item.id in resultsRef.current)) {
@@ -15890,6 +16083,9 @@ const FiveKReviewScreen = ({ initialQueue, onComplete, onBack }) => {
                   {item.trans}
                   <button onClick={(e) => { e.stopPropagation(); playPronunciation(); }} className="tactile rounded-full flex items-center justify-center" style={{ width: 34, height: 34, background: playing ? "#5BC890" : "rgba(91,200,144,0.18)", color: playing ? "white" : "#2E8A4F", fontSize: 16, flexShrink: 0 }}>🔊</button>
                 </div>
+                {item.roman && (
+                  <div className="font-body italic mt-1.5" style={{ fontSize: 14, color: "rgba(7,58,44,0.6)" }}>/{item.roman}/</div>
+                )}
                 <div className="font-body font-semibold mt-1.5" style={{ fontSize: 9.5, letterSpacing: "0.04em", color: "rgba(7,58,44,0.4)" }}>🔊 tap card to hear it</div>
 
                 {revealed ? (
@@ -15934,10 +16130,10 @@ const FiveKReviewScreen = ({ initialQueue, onComplete, onBack }) => {
 
           {revealed && result === null && (
             <div className="flex gap-2.5">
-              <button onClick={() => grade(false)} className="tactile flex-1 py-3.5 rounded-2xl font-display font-bold" style={{ background: "linear-gradient(180deg, #FFB0B0 0%, #E86A6A 100%)", color: "white", fontSize: 14, letterSpacing: "0.03em", border: "2px solid #B83A3A", boxShadow: "0 4px 0 #B83A3A", textShadow: "0 1px 0 rgba(0,0,0,0.15)" }}>
+              <button data-mute-sound onClick={() => grade(false)} className="tactile flex-1 py-3.5 rounded-2xl font-display font-bold" style={{ background: "linear-gradient(180deg, #FFB0B0 0%, #E86A6A 100%)", color: "white", fontSize: 14, letterSpacing: "0.03em", border: "2px solid #B83A3A", boxShadow: "0 4px 0 #B83A3A", textShadow: "0 1px 0 rgba(0,0,0,0.15)" }}>
                 ✗ Missed it
               </button>
-              <button onClick={() => grade(true)} className="tactile flex-1 py-3.5 rounded-2xl font-display font-bold" style={{ background: "linear-gradient(180deg, #6BE89F 0%, #2E8A4F 100%)", color: "white", fontSize: 14, letterSpacing: "0.03em", border: "2px solid #1E6B3A", boxShadow: "0 4px 0 #1E6B3A", textShadow: "0 1px 0 rgba(0,0,0,0.15)" }}>
+              <button data-mute-sound onClick={() => grade(true)} className="tactile flex-1 py-3.5 rounded-2xl font-display font-bold" style={{ background: "linear-gradient(180deg, #6BE89F 0%, #2E8A4F 100%)", color: "white", fontSize: 14, letterSpacing: "0.03em", border: "2px solid #1E6B3A", boxShadow: "0 4px 0 #1E6B3A", textShadow: "0 1px 0 rgba(0,0,0,0.15)" }}>
                 ✓ Got it
               </button>
             </div>
@@ -16878,7 +17074,7 @@ const PronunciationPracticeScreen = ({ phrase, phraseIdx, total, isReturning, on
   const chainRunningRef = useRef(false);
 
   const phraseText = phrase.words.map((w) => w.text).join(" ");
-  const localeMap = { "ES-MX": "es-MX", "ES-ES": "es-ES", "FR-FR": "fr-FR", "DE-DE": "de-DE", "IT-IT": "it-IT", "PT-BR": "pt-BR" };
+  const localeMap = { "ES-MX": "es-MX", "ES-ES": "es-ES", "FR-FR": "fr-FR", "DE-DE": "de-DE", "IT-IT": "it-IT", "PT-BR": "pt-BR", "KO-KR": "ko-KR" };
   const lang = localeMap[phrase.region] || "es-MX";
 
   // Helper: play native pronunciation of a string. Returns a promise that
@@ -17029,7 +17225,7 @@ const PronunciationPracticeScreen = ({ phrase, phraseIdx, total, isReturning, on
 
     if (m) {
       // Milestone path: chip floats, then big celebration overlay, then advance
-      setTimeout(() => setMilestone(m), 350);
+      setTimeout(() => { setMilestone(m); playSound("progress"); }, 350);
       setTimeout(() => {
         setMilestone(null);
         setShowPlusOne(false);
