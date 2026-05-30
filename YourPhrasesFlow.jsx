@@ -1683,10 +1683,34 @@ const importSupportsLang = (lang) => IMPORT_LIBRARY.some((e) => e.tr[lang]);
 // True if the typed answer matches ANY accepted form (native script OR
 // romanization OR translation), leniently — uses normalizeAnswer (defined
 // alongside the typed-duel screen) to ignore case, accents, and punctuation.
+// Loose romaja normalizer — folds the many ways a beginner might romanize a
+// Korean word down to one canonical form, so typing "annyeonghaseyo",
+// "ahnnyuhnghasehyo", or the RR "an-nyeong-ha-se-yo" all match. Korean
+// characters pass through untouched (so typing real Hangul still works via the
+// exact path). Only ever compared against the CURRENT card's answer, so being
+// generous here can't cause cross-card false positives.
+const looseRomaja = (s) => {
+  let x = normalizeAnswer(s).replace(/[-'\u2019\s]/g, "");
+  x = x
+    // multi-letter vowel clusters → canonical single vowel (RR + respelling)
+    .replace(/yeo/g, "yu").replace(/eo/g, "u").replace(/eu/g, "u")
+    .replace(/ae/g, "e").replace(/ah/g, "a").replace(/uh/g, "u")
+    .replace(/eh/g, "e").replace(/oh/g, "o").replace(/oo/g, "u")
+    .replace(/ee/g, "i").replace(/sh/g, "s")
+    // fold the lenis/aspirated/liquid consonant confusions English ears make
+    .replace(/k/g, "g").replace(/t/g, "d").replace(/p/g, "b").replace(/l/g, "r")
+    // collapse doubled letters (tense consonants kk/tt/ss/etc + leftovers)
+    .replace(/(.)\1+/g, "$1");
+  return x;
+};
+
 const answerMatches = (input, accepted = []) => {
-  const n = normalizeAnswer(input);
-  if (!n) return false;
-  return accepted.filter(Boolean).some((a) => normalizeAnswer(a) === n);
+  const nIn = normalizeAnswer(input);
+  if (!nIn) return false;
+  const rIn = looseRomaja(input);
+  return accepted.filter(Boolean).some(
+    (a) => normalizeAnswer(a) === nIn || (rIn && looseRomaja(a) === rIn)
+  );
 };
 
 // === SHADOW (KATA) MOCK DATA ===
@@ -1695,18 +1719,21 @@ const answerMatches = (input, accepted = []) => {
 // back and forth and the user taps to chop it into a stack. Aim is engagement
 // during shadowing repetition. 5 phrases per session, 3 plays per phrase.
 const SHADOW_PHRASES = [
-  // KOREAN PREVIEW. phrase = Hangul, phon = Revised Romanization, translation = English.
-  // seenBefore=false → 5 reps; true → 3 reps.
-  { id: "sh01", lang: "ko", phrase: "안녕하세요",                translation: "Hello",                          phon: "an-nyeong-ha-se-yo",            speechLang: "ko-KR", seenBefore: false },
-  { id: "sh02", lang: "ko", phrase: "만나서 반갑습니다",          translation: "Nice to meet you",               phon: "man-na-seo ban-gap-seum-ni-da", speechLang: "ko-KR", seenBefore: true  },
-  { id: "sh03", lang: "ko", phrase: "어디에서 왔어요?",          translation: "Where are you from?",            phon: "eo-di-e-seo wa-sseo-yo",        speechLang: "ko-KR", seenBefore: true  },
-  { id: "sh04", lang: "ko", phrase: "저는 미국에서 왔어요",       translation: "I'm from the United States",     phon: "jeo-neun mi-gug-e-seo wa-sseo-yo", speechLang: "ko-KR", seenBefore: true  },
-  { id: "sh05", lang: "ko", phrase: "한국어를 조금 해요",         translation: "I speak a little Korean",        phon: "han-gug-eo-reul jo-geum hae-yo", speechLang: "ko-KR", seenBefore: false },
-  { id: "sh06", lang: "ko", phrase: "지금 몇 시예요?",           translation: "What time is it now?",           phon: "ji-geum myeot si-ye-yo",        speechLang: "ko-KR", seenBefore: true  },
-  { id: "sh07", lang: "ko", phrase: "다시 말해 주세요",          translation: "Please say that again",          phon: "da-si mal-hae ju-se-yo",        speechLang: "ko-KR", seenBefore: true  },
-  { id: "sh08", lang: "ko", phrase: "커피 한 잔 주세요",         translation: "One coffee, please",             phon: "keo-pi han jan ju-se-yo",       speechLang: "ko-KR", seenBefore: false },
-  { id: "sh09", lang: "ko", phrase: "화장실이 어디예요?",        translation: "Where is the bathroom?",         phon: "hwa-jang-sir-i eo-di-ye-yo",    speechLang: "ko-KR", seenBefore: true  },
-  { id: "sh10", lang: "ko", phrase: "배고파요, 밥 먹으러 갈까요?", translation: "I'm hungry, shall we go eat?",   phon: "bae-go-pa-yo, bap meog-eu-reo gal-kka-yo", speechLang: "ko-KR", seenBefore: true  },
+  // KOREAN PREVIEW. phrase = Hangul (the hero), say = English sound-it-out
+  // respelling (the learner aid; CAPS = stressed-ish syllable feel), phon =
+  // Revised Romanization (kept for the optional RR setting, NOT shown by default),
+  // translation = English. seenBefore=false → 5 reps; true → 3 reps.
+  // NOTE: respellings are preview-quality — need native-speaker review pre-launch.
+  { id: "sh01", lang: "ko", phrase: "안녕하세요",                translation: "Hello",                          say: "ahn-nyuhng-hah-seh-yoh",                  phon: "an-nyeong-ha-se-yo",            speechLang: "ko-KR", seenBefore: false },
+  { id: "sh02", lang: "ko", phrase: "만나서 반갑습니다",          translation: "Nice to meet you",               say: "mahn-nah-suh bahn-gahp-suhm-nee-dah",     phon: "man-na-seo ban-gap-seum-ni-da", speechLang: "ko-KR", seenBefore: true  },
+  { id: "sh03", lang: "ko", phrase: "어디에서 왔어요?",          translation: "Where are you from?",            say: "uh-dee-eh-suh wah-ssuh-yoh",              phon: "eo-di-e-seo wa-sseo-yo",        speechLang: "ko-KR", seenBefore: true  },
+  { id: "sh04", lang: "ko", phrase: "저는 미국에서 왔어요",       translation: "I'm from the United States",     say: "juh-nuhn mee-goo-geh-suh wah-ssuh-yoh",   phon: "jeo-neun mi-gug-e-seo wa-sseo-yo", speechLang: "ko-KR", seenBefore: true  },
+  { id: "sh05", lang: "ko", phrase: "한국어를 조금 해요",         translation: "I speak a little Korean",        say: "hahn-goo-guh-ruhl joh-guhm heh-yoh",      phon: "han-gug-eo-reul jo-geum hae-yo", speechLang: "ko-KR", seenBefore: false },
+  { id: "sh06", lang: "ko", phrase: "지금 몇 시예요?",           translation: "What time is it now?",           say: "jee-guhm myuht shee-yeh-yoh",             phon: "ji-geum myeot si-ye-yo",        speechLang: "ko-KR", seenBefore: true  },
+  { id: "sh07", lang: "ko", phrase: "다시 말해 주세요",          translation: "Please say that again",          say: "dah-shee mahl-heh joo-seh-yoh",           phon: "da-si mal-hae ju-se-yo",        speechLang: "ko-KR", seenBefore: true  },
+  { id: "sh08", lang: "ko", phrase: "커피 한 잔 주세요",         translation: "One coffee, please",             say: "kuh-pee hahn jahn joo-seh-yoh",           phon: "keo-pi han jan ju-se-yo",       speechLang: "ko-KR", seenBefore: false },
+  { id: "sh09", lang: "ko", phrase: "화장실이 어디예요?",        translation: "Where is the bathroom?",         say: "hwah-jahng-shee-ree uh-dee-yeh-yoh",      phon: "hwa-jang-sir-i eo-di-ye-yo",    speechLang: "ko-KR", seenBefore: true  },
+  { id: "sh10", lang: "ko", phrase: "배고파요, 밥 먹으러 갈까요?", translation: "I'm hungry, shall we go eat?",   say: "beh-goh-pah-yoh, bahp muh-guh-ruh gahl-kkah-yoh", phon: "bae-go-pa-yo, bap meog-eu-reo gal-kka-yo", speechLang: "ko-KR", seenBefore: true  },
 ];
 
 // === DAILY RECALL — OPPONENT ROSTER (expanded for Phase 1) ===
@@ -2013,20 +2040,21 @@ const ROUNDS = [
 // future cards rather than repeating a card the user already nailed.
 const MOCK_CARDS = [
   // KOREAN PREVIEW. `es` holds the displayed phrase (Hangul) — kept as the key the
-  // card UI already reads; `roman` is the romanization shown beneath it; distractors
-  // are plausible-but-wrong Korean options for the "produce" phase.
-  { es: "제 이름은 후안이에요",   roman: "je i-reum-eun hu-an-i-e-yo",   en: "My name is Juan",          dueInDays: -8, distractors: ["제 이름을 후안이에요", "저 이름은 후안이에요", "제 이름이 후안이세요"] },
-  { es: "화장실이 어디예요?",     roman: "hwa-jang-sir-i eo-di-ye-yo",   en: "Where is the bathroom?",   dueInDays: -7, distractors: ["화장실이 언제예요?", "화장실을 어디예요?", "화장실이 어디할까요?"] },
-  { es: "배고파요",              roman: "bae-go-pa-yo",                 en: "I'm hungry",               dueInDays: -6, distractors: ["목말라요", "졸려요", "추워요"] },
-  { es: "한국어를 조금 해요",     roman: "han-gug-eo-reul jo-geum hae-yo", en: "I speak a little Korean", dueInDays: -6, distractors: ["한국어를 많이 해요", "한국어가 조금 해요", "한국어를 조금 있어요"] },
-  { es: "얼마예요?",             roman: "eol-ma-ye-yo",                 en: "How much is it?",          dueInDays: -5, distractors: ["어디예요?", "언제예요?", "누구예요?"] },
-  { es: "몇 시예요?",            roman: "myeot si-ye-yo",               en: "What time is it?",         dueInDays: -5, distractors: ["몇 개예요?", "무슨 시예요?", "몇 시할래요?"] },
-  { es: "이해 못 했어요",         roman: "i-hae mot hae-sseo-yo",        en: "I don't understand",       dueInDays: -4, distractors: ["이해 했어요", "이해 안 먹었어요", "이해 못 갔어요"] },
-  { es: "도와줄 수 있어요?",      roman: "do-wa-jul su i-sseo-yo",       en: "Can you help me?",         dueInDays: -4, distractors: ["도와줄 수 없어요?", "도와줄 거 있어요?", "도와주고 있어요?"] },
-  { es: "커피 주세요",           roman: "keo-pi ju-se-yo",              en: "A coffee, please",         dueInDays: -3, distractors: ["커피 주셨어요", "커피가 주세요", "커피 줄까요"] },
-  { es: "영어 할 줄 알아요?",     roman: "yeong-eo hal jul ar-a-yo",     en: "Do you speak English?",    dueInDays: -2, distractors: ["영어 할 줄 몰라요?", "영어 할 수 알아요?", "영어 하고 알아요?"] },
-  { es: "어디에 살아요?",         roman: "eo-di-e sar-a-yo",             en: "Where do you live?",       dueInDays: -1, distractors: ["어디에 가요?", "어디에 살았어요?", "어디에서 살까요?"] },
-  { es: "만나서 반가워요",        roman: "man-na-seo ban-ga-wo-yo",      en: "Nice to meet you",         dueInDays: 2,  distractors: ["만나서 반가웠어요", "만나서 고마워요", "만나고 반가워요"] },
+  // card UI already reads; `say` is the English sound-it-out respelling shown to the
+  // learner and accepted when typed; `roman` (RR) is kept only as an extra accepted
+  // spelling, never displayed; distractors are plausible-but-wrong Korean options.
+  { es: "제 이름은 후안이에요",   roman: "je i-reum-eun hu-an-i-e-yo",   say: "jeh ee-ruh-muhn hoo-ah-nee-eh-yoh", en: "My name is Juan",          dueInDays: -8, distractors: ["제 이름을 후안이에요", "저 이름은 후안이에요", "제 이름이 후안이세요"] },
+  { es: "화장실이 어디예요?",     roman: "hwa-jang-sir-i eo-di-ye-yo",   say: "hwah-jahng-shee-ree uh-dee-yeh-yoh", en: "Where is the bathroom?",   dueInDays: -7, distractors: ["화장실이 언제예요?", "화장실을 어디예요?", "화장실이 어디할까요?"] },
+  { es: "배고파요",              roman: "bae-go-pa-yo",                 say: "beh-goh-pah-yoh",                 en: "I'm hungry",               dueInDays: -6, distractors: ["목말라요", "졸려요", "추워요"] },
+  { es: "한국어를 조금 해요",     roman: "han-gug-eo-reul jo-geum hae-yo", say: "hahn-goo-guh-ruhl joh-guhm heh-yoh", en: "I speak a little Korean", dueInDays: -6, distractors: ["한국어를 많이 해요", "한국어가 조금 해요", "한국어를 조금 있어요"] },
+  { es: "얼마예요?",             roman: "eol-ma-ye-yo",                 say: "uhl-mah-yeh-yoh",                 en: "How much is it?",          dueInDays: -5, distractors: ["어디예요?", "언제예요?", "누구예요?"] },
+  { es: "몇 시예요?",            roman: "myeot si-ye-yo",               say: "myuht shee-yeh-yoh",              en: "What time is it?",         dueInDays: -5, distractors: ["몇 개예요?", "무슨 시예요?", "몇 시할래요?"] },
+  { es: "이해 못 했어요",         roman: "i-hae mot hae-sseo-yo",        say: "ee-heh moht heh-ssuh-yoh",        en: "I don't understand",       dueInDays: -4, distractors: ["이해 했어요", "이해 안 먹었어요", "이해 못 갔어요"] },
+  { es: "도와줄 수 있어요?",      roman: "do-wa-jul su i-sseo-yo",       say: "doh-wah-jool soo ee-ssuh-yoh",    en: "Can you help me?",         dueInDays: -4, distractors: ["도와줄 수 없어요?", "도와줄 거 있어요?", "도와주고 있어요?"] },
+  { es: "커피 주세요",           roman: "keo-pi ju-se-yo",              say: "kuh-pee joo-seh-yoh",             en: "A coffee, please",         dueInDays: -3, distractors: ["커피 주셨어요", "커피가 주세요", "커피 줄까요"] },
+  { es: "영어 할 줄 알아요?",     roman: "yeong-eo hal jul ar-a-yo",     say: "yuhng-uh hahl jool ah-rah-yoh",   en: "Do you speak English?",    dueInDays: -2, distractors: ["영어 할 줄 몰라요?", "영어 할 수 알아요?", "영어 하고 알아요?"] },
+  { es: "어디에 살아요?",         roman: "eo-di-e sar-a-yo",             say: "uh-dee-eh sah-rah-yoh",           en: "Where do you live?",       dueInDays: -1, distractors: ["어디에 가요?", "어디에 살았어요?", "어디에서 살까요?"] },
+  { es: "만나서 반가워요",        roman: "man-na-seo ban-ga-wo-yo",      say: "mahn-nah-suh bahn-gah-wuh-yoh",   en: "Nice to meet you",         dueInDays: 2,  distractors: ["만나서 반가웠어요", "만나서 고마워요", "만나고 반가워요"] },
 ];
 
 // Card indices that are DUE for review (dueInDays <= 0), sorted soonest-first
@@ -2907,7 +2935,7 @@ const TypedPvpPlay = ({ cards, rival, me, onFinish, onBack }) => {
     if (feedback !== null || over || intro || !input.trim()) return;
     // Accept the native-script answer OR its romanization (for languages with
     // their own alphabet). Lenient on case/accents/punctuation via answerMatches.
-    const correct = answerMatches(input, [expected, card?.roman, card?.romanization]);
+    const correct = answerMatches(input, [expected, card?.say, card?.roman, card?.romanization]);
     setPeek(false);
 
     if (correct) {
@@ -3176,12 +3204,12 @@ const TypedPvpPlay = ({ cards, rival, me, onFinish, onBack }) => {
           {(feedback === "wrong" || (peek && !feedback)) && (
             <div className="mt-0.5 font-body font-bold" style={{ fontSize: 12, color: feedback === "wrong" ? "rgba(255,255,255,0.92)" : "rgba(122,74,26,0.7)" }}>
               {peek && !feedback ? "👁 " : "Answer: "}<span className="font-display font-bold">{expected}</span>
-              {card?.roman && <span className="font-body italic" style={{ fontWeight: 600, marginLeft: 6, opacity: 0.85 }}>/{card.roman}/</span>}
+              {(card?.say || card?.roman) && <span className="font-body" style={{ fontWeight: 700, marginLeft: 6, opacity: 0.9 }}>{card?.say || card.roman}</span>}
             </div>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <input ref={inputRef} type="text" value={input} onChange={(e) => feedback === null && !over && !intro && setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }} disabled={feedback !== null || over || intro} placeholder="Type the translation…" className="flex-1 font-body" style={{ background: "white", border: "2px solid #C99227", borderRadius: 12, padding: "11px 13px", color: "#3D2A05", fontSize: 15, outline: "none", caretColor: "#E8801F", minWidth: 0 }} autoCapitalize="off" autoCorrect="off" spellCheck="false" />
+          <input ref={inputRef} type="text" value={input} onChange={(e) => feedback === null && !over && !intro && setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }} disabled={feedback !== null || over || intro} placeholder="Type in Korean — or how it sounds…" className="flex-1 font-body" style={{ background: "white", border: "2px solid #C99227", borderRadius: 12, padding: "11px 13px", color: "#3D2A05", fontSize: 15, outline: "none", caretColor: "#E8801F", minWidth: 0 }} autoCapitalize="off" autoCorrect="off" spellCheck="false" />
           <button onClick={handleSubmit} disabled={feedback !== null || over || intro || !input.trim()} className="tactile rounded-xl font-display font-bold flex-shrink-0" style={{ background: (feedback !== null || over || intro || !input.trim()) ? "rgba(255,255,255,0.12)" : "linear-gradient(180deg, #FFD83A 0%, #E8801F 100%)", color: (feedback !== null || over || intro || !input.trim()) ? "rgba(255,255,255,0.4)" : "#3D2A05", fontSize: 15, padding: "11px 16px", border: "2px solid " + ((feedback !== null || over || intro || !input.trim()) ? "rgba(255,255,255,0.15)" : "#B85020"), boxShadow: (feedback !== null || over || intro || !input.trim()) ? "none" : "0 3px 0 #B85020" }}>⚔️</button>
         </div>
         {input.length > 0 && feedback === null && (
@@ -8669,16 +8697,22 @@ export default function YourPhrasesFlow() {
       // Explicit override wins.
       const explicit = el.closest("[data-sound]");
       if (explicit) { playSound(explicit.getAttribute("data-sound")); return; }
-      // Otherwise infer the sound from the label text.
+      // Otherwise infer the sound from the label text. NOTE: the home-page CTA
+      // is tagged data-sound="start-training" directly (handled above), so the
+      // start-training sound is HOME-ONLY. Every other forward CTA during a
+      // session — CONTINUE, LET'S GO, START: …, KEEP GOING, BACK TO TRAINING —
+      // is the "continue" sound.
       const label = (el.getAttribute("aria-label") || el.textContent || "").trim().toLowerCase();
       let slug = "click";
-      if (label.includes("start training") || label.includes("let's go")) slug = "start-training";
-      else if (label.includes("phrasebook")) slug = "phrasebook";
-      // "Back to Training" is a FORWARD action despite starting with "back".
-      else if (label.includes("back to training") || label.includes("keep going")) slug = "continue";
+      if (label.includes("phrasebook")) slug = "phrasebook";
+      else if (
+        label.includes("continue") ||
+        label.includes("let's go") || label.includes("lets go") ||
+        label.includes("start training") || label.startsWith("start:") ||
+        label.includes("keep going") || label.includes("back to training")
+      ) slug = "continue";
       else if (label === "←" || label.startsWith("back")) slug = "back";
       else if (label === "✕" || label === "×" || label === "✖") slug = "close";
-      else if (label.includes("continue")) slug = "continue";
       playSound(slug);
     };
     document.addEventListener("click", onTap, true);
@@ -12536,6 +12570,7 @@ const HomeScreen = ({
           <div className="mt-2" onMouseDown={(e) => e.preventDefault()}>
             <button
               onClick={onStart}
+              data-sound="start-training"
               className={`tactile w-full py-3 rounded-2xl font-display font-bold relative ${!allModulesDone ? "cta-pulse" : ""}`}
               style={{
                 // Brighter gold gradient — top stop is significantly more saturated than
@@ -14915,6 +14950,29 @@ const FinishScreen = ({ pufflingState, reps, sessionDone, dailyDone, dailyGoal, 
     return () => clearTimeout(startDelay);
   }, [isModuleComplete, stage, reps]);
 
+  // Coins earned this session — 1 coin per phrase created. Counts up and plays
+  // the coins sound just after the reps counter lands. Same for any language.
+  const coinsEarned = reps;
+  const [displayCoins, setDisplayCoins] = useState(0);
+  useEffect(() => {
+    if (!isModuleComplete || stage !== "celebrate" || coinsEarned <= 0) return;
+    setDisplayCoins(0);
+    const startDelay = setTimeout(() => {
+      playSound("coins");
+      const duration = 900;
+      const steps = Math.min(coinsEarned, 24);
+      const stepTime = duration / steps;
+      let current = 0;
+      const tick = () => {
+        current += 1;
+        setDisplayCoins(Math.round((current / steps) * coinsEarned));
+        if (current < steps) setTimeout(tick, stepTime);
+      };
+      tick();
+    }, 2050);
+    return () => clearTimeout(startDelay);
+  }, [isModuleComplete, stage, coinsEarned]);
+
   // ============================================
   // STATE A: MODULE COMPLETE — two stages
   // Stage 1 (celebrate): pure dopamine — choreographed Puffling + hero reps
@@ -14979,6 +15037,17 @@ const FinishScreen = ({ pufflingState, reps, sessionDone, dailyDone, dailyGoal, 
                 </span>
               </div>
             </div>
+
+            {/* COINS EARNED — 1 per phrase created. Lands just after the reps counter. */}
+            {coinsEarned > 0 && (
+              <div className="flex justify-center mt-2.5 pop-in" style={{ animationDelay: "2050ms" }}>
+                <div className="flex items-center gap-1.5 px-4 py-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.55)", border: "2px solid rgba(255,255,255,0.85)", backdropFilter: "blur(6px)" }}>
+                  <GoldCoin size={18} />
+                  <span key={displayCoins} className="font-display font-bold count-tick" style={{ color: "#7A5A20", fontSize: 18, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>+{displayCoins}</span>
+                  <span className="font-display font-bold" style={{ color: "#A0782A", fontSize: 10, letterSpacing: "0.1em" }}>COINS</span>
+                </div>
+              </div>
+            )}
 
             {/* CTA */}
             <div className="mt-4 slide-up" style={{ animationDelay: "400ms" }}>
@@ -16255,6 +16324,13 @@ const FiveKCompleteScreen = ({ wordsAdded, lifetime, lifetimeTarget, onFinish })
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
+  }, [wordsAdded]);
+
+  // Coins reward sound — fires as the coin counter lands (delay + duration).
+  useEffect(() => {
+    if (wordsAdded <= 0) return;
+    const t = setTimeout(() => playSound("coins"), 700 + 1000);
+    return () => clearTimeout(t);
   }, [wordsAdded]);
 
   return (
@@ -18270,7 +18346,7 @@ const PronunciationCompleteScreen = ({ repsAdded, onFinish }) => {
         cur += 1;
         setDisplayCoins(Math.round((cur / steps) * coinsEarned));
         if (cur < steps) setTimeout(tick, stepTime);
-        else { setCoinPop(true); setTimeout(() => setCoinPop(false), 500); }
+        else { setCoinPop(true); if (coinsEarned > 0) playSound("coins"); setTimeout(() => setCoinPop(false), 500); }
       };
       tick();
     }, 750);
@@ -24822,18 +24898,20 @@ const ShadowKataScreen = ({ onBack, onComplete, isReturning }) => {
               boxShadow: "0 3px 0 #0A5A45, inset 0 1px 0 rgba(255,255,255,0.6)",
             }}>
               <div className="font-display font-bold" style={{
-                fontSize: 22, color: "#3D2A05", letterSpacing: "-0.01em", lineHeight: 1.1,
+                fontSize: 24, color: "#3D2A05", letterSpacing: "-0.01em", lineHeight: 1.1,
               }}>{currentPhraseData?.phrase}</div>
-              {/* Phonetic spelling — matches the Pronunciation module's /.../
-                  notation, but tinted teal to fit the Shadow banner palette */}
-              {currentPhraseData?.phon && (
-                <div className="font-body italic" style={{
-                  fontSize: 13,
+              {/* Pronunciation aid — English sound-it-out respelling (say), the
+                  thing a beginner can actually read aloud. Falls back to the RR
+                  (phon) in /.../ only if no respelling exists for this phrase.
+                  RR is intentionally NOT shown when a respelling is present. */}
+              {(currentPhraseData?.say || currentPhraseData?.phon) && (
+                <div className="font-body" style={{
+                  fontSize: 15,
                   color: "#1A8F6E",
-                  fontWeight: 600,
-                  letterSpacing: "0.02em",
-                  marginTop: 3,
-                }}>/{currentPhraseData.phon}/</div>
+                  fontWeight: 700,
+                  letterSpacing: "0.01em",
+                  marginTop: 4,
+                }}>{currentPhraseData?.say || `/${currentPhraseData.phon}/`}</div>
               )}
               <div className="font-body italic mt-1" style={{
                 fontSize: 13, color: "rgba(58,42,5,0.7)",
@@ -25764,6 +25842,15 @@ const ShadowStatPill = ({ icon, label, value }) => (
    rating, and the Recall buff awarded.
    ============================================================ */
 const ShadowSummary = ({ totalBoards, totalPerfects, bestTower, score, sessionMode, dashDistance = 0, dashBestStreak = 0, dashCoins = 0, phrasesCount, totalReps, onComplete }) => {
+  // Coins reward sound — both summary layouts (kata + dash/audio) show the same
+  // "Coins earned" card with a coin-drop animation landing ~600ms after mount.
+  const shadowCoins = (totalReps || 0) + (dashCoins || 0);
+  useEffect(() => {
+    if (shadowCoins <= 0) return;
+    const t = setTimeout(() => playSound("coins"), 600);
+    return () => clearTimeout(t);
+  }, [shadowCoins]);
+
   // Non-kata modes (dash, audio) skipped the tower-stack scoring system,
   // so there's no tier/buff to grade. Render a calmer "training complete"
   // panel. Dash shows the distance run; audio shows just the rep tally.
