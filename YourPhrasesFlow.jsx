@@ -1316,10 +1316,11 @@ const ProgressBar = ({ value }) => (
 /* ============================================================
    PRIMARY BUTTON
    ============================================================ */
-const PrimaryBtn = ({ children, onClick, disabled, pulse = false }) => (
+const PrimaryBtn = ({ children, onClick, disabled, pulse = false, sound = "continue" }) => (
   <button
     onClick={onClick}
     disabled={disabled}
+    data-sound={sound}
     className={`tactile w-full py-4 rounded-2xl font-display font-bold text-lg ${pulse ? "cta-pulse" : ""}`}
     style={{
       background: disabled ? "#E5D9B0" : "linear-gradient(180deg, #FFD83A 0%, #F5C81A 100%)",
@@ -1393,6 +1394,8 @@ const LANGUAGES = {
   pt: { code: "pt", name: "Portuguese", flag: "🇵🇹" },
   ar: { code: "ar", name: "Arabic",     flag: "🇸🇦" },
 };
+
+const DATA_LANG = { cur: "ko" };
 
 // Mock user roster. Each user has multiple pufflings (one per language they're
 // learning). Stats are per-puffling. The first entry is the local player.
@@ -1720,7 +1723,7 @@ const answerMatches = (input, accepted = []) => {
 // rhythm-of-the-audio game: while the TTS phrase plays, a wooden board slides
 // back and forth and the user taps to chop it into a stack. Aim is engagement
 // during shadowing repetition. 5 phrases per session, 3 plays per phrase.
-const SHADOW_PHRASES = [
+const SHADOW_PHRASES_KO = [
   // KOREAN PREVIEW. phrase = Hangul (the hero), say = English sound-it-out
   // respelling (the learner aid; CAPS = stressed-ish syllable feel), phon =
   // Revised Romanization (kept for the optional RR setting, NOT shown by default),
@@ -1737,6 +1740,23 @@ const SHADOW_PHRASES = [
   { id: "sh09", lang: "ko", phrase: "화장실이 어디예요?",        translation: "Where is the bathroom?",         say: "hwah-jahng-shee-ree uh-dee-yeh-yoh",      phon: "hwa-jang-sir-i eo-di-ye-yo",    speechLang: "ko-KR", seenBefore: true  },
   { id: "sh10", lang: "ko", phrase: "배고파요, 밥 먹으러 갈까요?", translation: "I'm hungry, shall we go eat?",   say: "beh-goh-pah-yoh, bahp muh-guh-ruh gahl-kkah-yoh", phon: "bae-go-pa-yo, bap meog-eu-reo gal-kka-yo", speechLang: "ko-KR", seenBefore: true  },
 ];
+
+const SHADOW_PHRASES_ES = [
+  // SPANISH (Mexico). phrase = Spanish (the hero), say = English sound-it-out respelling.
+  { id: "sh01", lang: "es", phrase: "Hola",                          translation: "Hello",                        say: "OH-lah",                                  phon: "OH-lah",                                  speechLang: "es-MX", seenBefore: false },
+  { id: "sh02", lang: "es", phrase: "Mucho gusto",                   translation: "Nice to meet you",             say: "MOO-choh GOOS-toh",                       phon: "MOO-choh GOOS-toh",                       speechLang: "es-MX", seenBefore: true  },
+  { id: "sh03", lang: "es", phrase: "¿De dónde eres?",               translation: "Where are you from?",          say: "deh DOHN-deh EH-ress",                    phon: "deh DOHN-deh EH-ress",                    speechLang: "es-MX", seenBefore: true  },
+  { id: "sh04", lang: "es", phrase: "Soy de Estados Unidos",         translation: "I'm from the United States",   say: "soy deh ess-TAH-dohss oo-NEE-dohss",      phon: "soy deh ess-TAH-dohss oo-NEE-dohss",      speechLang: "es-MX", seenBefore: true  },
+  { id: "sh05", lang: "es", phrase: "Hablo un poco de español",      translation: "I speak a little Spanish",     say: "AH-bloh oon POH-koh deh ess-pah-NYOL",    phon: "AH-bloh oon POH-koh deh ess-pah-NYOL",    speechLang: "es-MX", seenBefore: false },
+  { id: "sh06", lang: "es", phrase: "¿Qué hora es?",                 translation: "What time is it?",             say: "keh OH-rah ess",                          phon: "keh OH-rah ess",                          speechLang: "es-MX", seenBefore: true  },
+  { id: "sh07", lang: "es", phrase: "¿Puedes repetir, por favor?",   translation: "Please say that again",        say: "PWEH-dess reh-peh-TEER por fah-VOR",      phon: "PWEH-dess reh-peh-TEER por fah-VOR",      speechLang: "es-MX", seenBefore: true  },
+  { id: "sh08", lang: "es", phrase: "Un café, por favor",            translation: "One coffee, please",           say: "oon kah-FEH por fah-VOR",                 phon: "oon kah-FEH por fah-VOR",                 speechLang: "es-MX", seenBefore: false },
+  { id: "sh09", lang: "es", phrase: "¿Dónde está el baño?",          translation: "Where is the bathroom?",       say: "DOHN-deh ess-TAH el BAHN-yoh",            phon: "DOHN-deh ess-TAH el BAHN-yoh",            speechLang: "es-MX", seenBefore: true  },
+  { id: "sh10", lang: "es", phrase: "Tengo hambre, ¿vamos a comer?", translation: "I'm hungry, shall we go eat?", say: "TEN-goh AHM-breh, VAH-mohss ah koh-MEHR", phon: "TEN-goh AHM-breh, VAH-mohss ah koh-MEHR", speechLang: "es-MX", seenBefore: true  },
+];
+const SHADOW_PHRASES_BY_LANG = { ko: SHADOW_PHRASES_KO, es: SHADOW_PHRASES_ES };
+const getShadow = () => SHADOW_PHRASES_BY_LANG[DATA_LANG.cur] || SHADOW_PHRASES_KO;
+const SHADOW_PHRASES = SHADOW_PHRASES_KO;
 
 // === DAILY RECALL — OPPONENT ROSTER (expanded for Phase 1) ===
 //
@@ -2040,7 +2060,7 @@ const ROUNDS = [
 // yet (a future review). A daily Recall session reviews every DUE card once;
 // when those run out the queue reaches for the next-soonest (smallest dueInDays)
 // future cards rather than repeating a card the user already nailed.
-const MOCK_CARDS = [
+const MOCK_CARDS_KO = [
   // KOREAN PREVIEW. `es` holds the displayed phrase (Hangul) — kept as the key the
   // card UI already reads; `say` is the English sound-it-out respelling shown to the
   // learner and accepted when typed; `roman` (RR) is kept only as an extra accepted
@@ -2058,6 +2078,27 @@ const MOCK_CARDS = [
   { es: "어디에 살아요?",         roman: "eo-di-e sar-a-yo",             say: "uh-dee-eh sah-rah-yoh",           en: "Where do you live?",       dueInDays: -1, distractors: ["어디에 가요?", "어디에 살았어요?", "어디에서 살까요?"] },
   { es: "만나서 반가워요",        roman: "man-na-seo ban-ga-wo-yo",      say: "mahn-nah-suh bahn-gah-wuh-yoh",   en: "Nice to meet you",         dueInDays: 2,  distractors: ["만나서 반가웠어요", "만나서 고마워요", "만나고 반가워요"] },
 ];
+
+const MOCK_CARDS_ES = [
+  // SPANISH (Mexico) parallel deck. `es` holds the displayed Spanish phrase; `say` is the
+  // English sound-it-out respelling; `roman` is an extra accepted spelling; distractors are
+  // plausible-but-wrong Spanish options. Same order/dueInDays as the Korean deck.
+  { es: "Me llamo Juan",            roman: "me yamo Juan",            say: "meh YAH-moh HWAHN",                 en: "My name is Juan",          dueInDays: -8, distractors: ["Me llamas Juan", "Mi llamo Juan", "Me llamo Juana"] },
+  { es: "¿Dónde está el baño?",     roman: "donde esta el bano",      say: "DOHN-deh ess-TAH el BAHN-yoh",      en: "Where is the bathroom?",   dueInDays: -7, distractors: ["¿Cuándo está el baño?", "¿Dónde es el baño?", "¿Dónde está la baño?"] },
+  { es: "Tengo hambre",             roman: "tengo hambre",            say: "TEN-goh AHM-breh",                  en: "I'm hungry",               dueInDays: -6, distractors: ["Tengo sed", "Tengo sueño", "Tengo frío"] },
+  { es: "Hablo un poco de español", roman: "hablo un poco de espanol", say: "AH-bloh oon POH-koh deh ess-pah-NYOL", en: "I speak a little Spanish", dueInDays: -6, distractors: ["Hablas un poco de español", "Hablo mucho español", "Hablo un poco en español"] },
+  { es: "¿Cuánto cuesta?",          roman: "cuanto cuesta",           say: "KWAN-toh KWESS-tah",                en: "How much is it?",          dueInDays: -5, distractors: ["¿Cuándo cuesta?", "¿Cuánto cuestan?", "¿Qué cuesta?"] },
+  { es: "¿Qué hora es?",            roman: "que hora es",             say: "keh OH-rah ess",                    en: "What time is it?",         dueInDays: -5, distractors: ["¿Qué hora son?", "¿Cuál hora es?", "¿Qué horas hay?"] },
+  { es: "No entiendo",              roman: "no entiendo",             say: "noh en-TYEN-doh",                   en: "I don't understand",       dueInDays: -4, distractors: ["No entiende", "No entendí", "No me entiendo"] },
+  { es: "¿Me puedes ayudar?",       roman: "me puedes ayudar",        say: "meh PWEH-dess ah-yoo-DAR",          en: "Can you help me?",         dueInDays: -4, distractors: ["¿Me puede ayudo?", "¿Te puedo ayudar?", "¿Me puedes ayuda?"] },
+  { es: "Un café, por favor",       roman: "un cafe por favor",       say: "oon kah-FEH por fah-VOR",           en: "A coffee, please",         dueInDays: -3, distractors: ["Una café, por favor", "Un café, por favores", "El café, por favor"] },
+  { es: "¿Hablas inglés?",          roman: "hablas ingles",           say: "AH-blahss een-GLESS",               en: "Do you speak English?",    dueInDays: -2, distractors: ["¿Hablo inglés?", "¿Hablas español?", "¿Hablar inglés?"] },
+  { es: "¿Dónde vives?",            roman: "donde vives",             say: "DOHN-deh VEE-vess",                 en: "Where do you live?",       dueInDays: -1, distractors: ["¿Dónde vive?", "¿Cuándo vives?", "¿Dónde vivías?"] },
+  { es: "Mucho gusto",              roman: "mucho gusto",             say: "MOO-choh GOOS-toh",                 en: "Nice to meet you",         dueInDays: 2,  distractors: ["Mucha gusto", "Mucho gusta", "Mucho gustó"] },
+];
+const MOCK_CARDS_BY_LANG = { ko: MOCK_CARDS_KO, es: MOCK_CARDS_ES };
+const getCards = () => MOCK_CARDS_BY_LANG[DATA_LANG.cur] || MOCK_CARDS_KO;
+const MOCK_CARDS = MOCK_CARDS_KO;
 
 // Card indices that are DUE for review (dueInDays <= 0), sorted soonest-first
 // (most overdue first). This is the order the Recall queue serves them in.
@@ -3613,6 +3654,7 @@ const MatchesHub = ({ onChallenge, onBack, rivalries = FRIEND_RIVALRIES }) => (
 // the self-grade. The card is sacred; the arena reacts to it.
 // ============================================================
 const InSparPlay = ({ onKO, onTimeOut, onYourKO, onEnd, onPause, resumeFrom, opponents = [MIKE], me = ME, lang = "es" }) => {
+  const MOCK_CARDS = getCards();
   // === MULTI-OPPONENT SUPPORT (Phase 2 — DYNAMIC) ===
   // The initial `opponents` prop is the baseline lineup (3 for solo Recall,
   // 1 for friend Spar). We mirror it as state so we can PUSH extra rivals if
@@ -8578,6 +8620,88 @@ const MatchupPreview = ({ theirs, mine, onConfirm, onBack }) => {
   );
 };
 
+
+// === LANGUAGE-KEYED CONTENT: Pronunciation + 5K (ko + es) ===
+const PRON_KO = [
+  { words: [ { text: "안녕하세요",  phon: "an-nyeong-ha-se-yo", gloss: "hello" }, { text: "만나서", phon: "man-na-seo", gloss: "meeting you" }, { text: "반갑습니다.", phon: "ban-gap-seum-ni-da", gloss: "nice / glad" } ], en: "Hello, nice to meet you.", region: "KO-KR" },
+  { words: [ { text: "화장실이", phon: "hwa-jang-sir-i", gloss: "the bathroom" }, { text: "어디예요?", phon: "eo-di-ye-yo", gloss: "where is it?" } ], en: "Where is the bathroom?", region: "KO-KR" },
+  { words: [ { text: "제", phon: "je", gloss: "my" }, { text: "이름은", phon: "i-reum-eun", gloss: "name" }, { text: "후안이에요.", phon: "hu-an-i-e-yo", gloss: "is Juan" } ], en: "My name is Juan.", region: "KO-KR" },
+  { words: [ { text: "얼마", phon: "eol-ma", gloss: "how much" }, { text: "예요?", phon: "ye-yo", gloss: "is it?" } ], en: "How much is it?", region: "KO-KR" },
+  { words: [ { text: "너무", phon: "neo-mu", gloss: "too / very" }, { text: "배고파요.", phon: "bae-go-pa-yo", gloss: "I'm hungry" } ], en: "I'm very hungry.", region: "KO-KR" },
+  { words: [ { text: "한국어를", phon: "han-gug-eo-reul", gloss: "Korean" }, { text: "조금", phon: "jo-geum", gloss: "a little" }, { text: "해요.", phon: "hae-yo", gloss: "I speak" } ], en: "I speak a little Korean.", region: "KO-KR" },
+];
+const PRON_ES = [
+  { words: [ { text: "Hola,", phon: "OH-lah", gloss: "hello" }, { text: "mucho", phon: "MOO-choh", gloss: "much / a lot" }, { text: "gusto.", phon: "GOOS-toh", gloss: "pleasure" } ], en: "Hello, nice to meet you.", region: "ES-MX" },
+  { words: [ { text: "¿Dónde", phon: "DOHN-deh", gloss: "where" }, { text: "está", phon: "ess-TAH", gloss: "is" }, { text: "el baño?", phon: "el BAHN-yoh", gloss: "the bathroom" } ], en: "Where is the bathroom?", region: "ES-MX" },
+  { words: [ { text: "Me", phon: "meh", gloss: "myself" }, { text: "llamo", phon: "YAH-moh", gloss: "I call" }, { text: "Juan.", phon: "HWAHN", gloss: "Juan" } ], en: "My name is Juan.", region: "ES-MX" },
+  { words: [ { text: "¿Cuánto", phon: "KWAN-toh", gloss: "how much" }, { text: "cuesta?", phon: "KWESS-tah", gloss: "does it cost?" } ], en: "How much is it?", region: "ES-MX" },
+  { words: [ { text: "Tengo", phon: "TEN-goh", gloss: "I have" }, { text: "mucha", phon: "MOO-chah", gloss: "much" }, { text: "hambre.", phon: "AHM-breh", gloss: "hunger" } ], en: "I'm very hungry.", region: "ES-MX" },
+  { words: [ { text: "Hablo", phon: "AH-bloh", gloss: "I speak" }, { text: "un poco", phon: "oon POH-koh", gloss: "a little" }, { text: "de español.", phon: "deh ess-pah-NYOL", gloss: "Spanish" } ], en: "I speak a little Spanish.", region: "ES-MX" },
+];
+const PRON_BY_LANG = { ko: PRON_KO, es: PRON_ES };
+
+const FIVEK_BANK_KO = [
+  { en: "what", trans: "무엇", roman: "mu-eot", region: "KO-KR", example: "What is that?" },
+  { en: "go", trans: "가다", roman: "ga-da", region: "KO-KR", example: "Let's go now." },
+  { en: "their", trans: "그들의", roman: "geu-deur-ui", region: "KO-KR", example: "This is their room." },
+  { en: "make", trans: "만들다", roman: "man-deul-da", region: "KO-KR", example: "I'll make dinner." },
+  { en: "want", trans: "원하다", roman: "won-ha-da", region: "KO-KR", example: "I want coffee." },
+  { en: "know", trans: "알다", roman: "al-da", region: "KO-KR", example: "I don't know yet." },
+  { en: "take", trans: "가지다", roman: "ga-ji-da", region: "KO-KR", example: "Take this with you." },
+  { en: "see", trans: "보다", roman: "bo-da", region: "KO-KR", example: "Can you see it?" },
+  { en: "come", trans: "오다", roman: "o-da", region: "KO-KR", example: "Come here, please." },
+  { en: "think", trans: "생각하다", roman: "saeng-gak-ha-da", region: "KO-KR", example: "I'll think about it." },
+  { en: "find", trans: "찾다", roman: "chat-da", region: "KO-KR", example: "Did you find it?" },
+  { en: "give", trans: "주다", roman: "ju-da", region: "KO-KR", example: "Give it to me." },
+  { en: "tell", trans: "말하다", roman: "mal-ha-da", region: "KO-KR", example: "Tell me everything." },
+  { en: "work", trans: "일하다", roman: "il-ha-da", region: "KO-KR", example: "I work on Mondays." },
+  { en: "call", trans: "부르다", roman: "bu-reu-da", region: "KO-KR", example: "Call me tonight." },
+  { en: "try", trans: "시도하다", roman: "si-do-ha-da", region: "KO-KR", example: "Just try once." },
+  { en: "ask", trans: "묻다", roman: "mut-da", region: "KO-KR", example: "Ask the waiter." },
+  { en: "feel", trans: "느끼다", roman: "neu-kki-da", region: "KO-KR", example: "How do you feel?" },
+  { en: "leave", trans: "떠나다", roman: "tteo-na-da", region: "KO-KR", example: "We leave at six." },
+  { en: "stay", trans: "머무르다", roman: "meo-mu-reu-da", region: "KO-KR", example: "Stay a little longer." },
+];
+const FIVEK_BANK_ES = [
+  { en: "what", trans: "qué", roman: "keh", region: "ES-MX", example: "What is that?" },
+  { en: "go", trans: "ir", roman: "eer", region: "ES-MX", example: "Let's go now." },
+  { en: "their", trans: "su", roman: "soo", region: "ES-MX", example: "This is their room." },
+  { en: "make", trans: "hacer", roman: "ah-SEHR", region: "ES-MX", example: "I'll make dinner." },
+  { en: "want", trans: "querer", roman: "keh-REHR", region: "ES-MX", example: "I want coffee." },
+  { en: "know", trans: "saber", roman: "sah-BEHR", region: "ES-MX", example: "I don't know yet." },
+  { en: "take", trans: "tomar", roman: "toh-MAHR", region: "ES-MX", example: "Take this with you." },
+  { en: "see", trans: "ver", roman: "vehr", region: "ES-MX", example: "Can you see it?" },
+  { en: "come", trans: "venir", roman: "veh-NEER", region: "ES-MX", example: "Come here, please." },
+  { en: "think", trans: "pensar", roman: "pen-SAHR", region: "ES-MX", example: "I'll think about it." },
+  { en: "find", trans: "encontrar", roman: "en-kohn-TRAHR", region: "ES-MX", example: "Did you find it?" },
+  { en: "give", trans: "dar", roman: "dahr", region: "ES-MX", example: "Give it to me." },
+  { en: "tell", trans: "decir", roman: "deh-SEER", region: "ES-MX", example: "Tell me everything." },
+  { en: "work", trans: "trabajar", roman: "trah-bah-HAHR", region: "ES-MX", example: "I work on Mondays." },
+  { en: "call", trans: "llamar", roman: "yah-MAHR", region: "ES-MX", example: "Call me tonight." },
+  { en: "try", trans: "intentar", roman: "een-ten-TAHR", region: "ES-MX", example: "Just try once." },
+  { en: "ask", trans: "preguntar", roman: "preh-goon-TAHR", region: "ES-MX", example: "Ask the waiter." },
+  { en: "feel", trans: "sentir", roman: "sen-TEER", region: "ES-MX", example: "How do you feel?" },
+  { en: "leave", trans: "salir", roman: "sah-LEER", region: "ES-MX", example: "We leave at six." },
+  { en: "stay", trans: "quedarse", roman: "keh-DAHR-seh", region: "ES-MX", example: "Stay a little longer." },
+];
+const FIVEK_BANK_BY_LANG = { ko: FIVEK_BANK_KO, es: FIVEK_BANK_ES };
+
+const FIVEK_SCHED = (lang, now, dayMs) => lang === "es" ? [
+  { id: "house",  en: "house",  trans: "casa",     roman: "KAH-sah",     region: "ES-MX", hook: "casa → a CASA you call HOME.",              stage: 2, dueAt: now - 1.0 * dayMs, lastReviewedAt: now - 8 * dayMs },
+  { id: "water",  en: "water",  trans: "agua",     roman: "AH-gwah",     region: "ES-MX", hook: "agua → 'AH-gwah' — a gulp of WATER.",       stage: 1, dueAt: now - 2.0 * dayMs, lastReviewedAt: now - 6 * dayMs },
+  { id: "friend", en: "friend", trans: "amigo",    roman: "ah-MEE-goh",  region: "ES-MX", hook: "amigo → 'a-MEE-go' — my FRIEND and me GO.", stage: 3, dueAt: now - 0.5 * dayMs, lastReviewedAt: now - 9 * dayMs },
+  { id: "time",   en: "time",   trans: "tiempo",   roman: "TYEM-poh",    region: "ES-MX", hook: "tiempo → the TEMPO of TIME.",              stage: 1, dueAt: now - 3.0 * dayMs, lastReviewedAt: now - 7 * dayMs },
+  { id: "food",   en: "food",   trans: "comida",   roman: "koh-MEE-dah", region: "ES-MX", hook: "comida → 'co-MEE-da' — COME and eat.",     stage: 0, dueAt: now - 1.0 * dayMs, lastReviewedAt: now - 2 * dayMs },
+  { id: "job",    en: "job",    trans: "trabajo",  roman: "trah-BAH-hoh",region: "ES-MX", hook: null,                                       stage: 4, dueAt: now + 20 * dayMs, lastReviewedAt: now - 4 * dayMs },
+] : [
+  { id: "house",  en: "house",  trans: "집",   roman: "jip",     region: "KO-KR", hook: "집 (jip) → a JEEP parked outside your HOUSE.",                 stage: 2, dueAt: now - 1.0 * dayMs, lastReviewedAt: now - 8 * dayMs },
+  { id: "water",  en: "water",  trans: "물",   roman: "mul",     region: "KO-KR", hook: "물 (mul) → a 'MOO'-cow gulps down WATER.",                     stage: 1, dueAt: now - 2.0 * dayMs, lastReviewedAt: now - 6 * dayMs },
+  { id: "friend", en: "friend", trans: "친구",  roman: "chin-gu", region: "KO-KR", hook: "친구 (chin-gu) → a FRIEND chucks you on the CHIN, all goo-ey.", stage: 3, dueAt: now - 0.5 * dayMs, lastReviewedAt: now - 9 * dayMs },
+  { id: "time",   en: "time",   trans: "시간",  roman: "si-gan",  region: "KO-KR", hook: "시간 (si-gan) → 'SEE-gone' — TIME, once you SEE it, it's GONE.", stage: 1, dueAt: now - 3.0 * dayMs, lastReviewedAt: now - 7 * dayMs },
+  { id: "food",   en: "food",   trans: "음식",  roman: "eum-sik", region: "KO-KR", hook: "음식 (eum-sik) → 'um, SEEK' — you SEEK something to eat.",      stage: 0, dueAt: now - 1.0 * dayMs, lastReviewedAt: now - 2 * dayMs },
+  { id: "job",    en: "job",    trans: "직업",  roman: "jig-eop", region: "KO-KR", hook: null,                                                          stage: 4, dueAt: now + 20 * dayMs, lastReviewedAt: now - 4 * dayMs },
+];
+
 export default function YourPhrasesFlow() {
   const [screen, setScreen] = useState("home"); // home | chooseTraining | start | topic | startHereCategory | startHereFill | info | transition | phrase | finish
   const [topic, setTopic] = useState(null);
@@ -8680,6 +8804,7 @@ export default function YourPhrasesFlow() {
   // The language the user is currently focused on (drives the fluency pill +
   // phrasebook). Switched from the language picker that opens off the pill.
   const [activeLang, setActiveLang] = useState("ko");
+  DATA_LANG.cur = activeLang;
 
   // Global UI sound. One capture-phase listener covers every button / .tactile
   // element in the app (so we don't touch hundreds of onClick handlers), and
@@ -8705,13 +8830,16 @@ export default function YourPhrasesFlow() {
       // session — CONTINUE, LET'S GO, START: …, KEEP GOING, BACK TO TRAINING —
       // is the "continue" sound.
       const label = (el.getAttribute("aria-label") || el.textContent || "").trim().toLowerCase();
+      const endsWithArrow = /[→›»]$/.test(label); // forward CTAs end with an arrow
       let slug = "click";
       if (label.includes("phrasebook")) slug = "phrasebook";
       else if (
         label.includes("continue") ||
         label.includes("let's go") || label.includes("lets go") ||
         label.includes("start training") || label.startsWith("start:") ||
-        label.includes("keep going") || label.includes("back to training")
+        label.includes("keep going") || label.includes("back to training") ||
+        label.includes("get started") ||
+        endsWithArrow
       ) slug = "continue";
       else if (label === "←" || label.startsWith("back")) slug = "back";
       else if (label === "✕" || label === "×" || label === "✖") slug = "close";
@@ -9760,28 +9888,7 @@ export default function YourPhrasesFlow() {
   const [fiveKReviewIdx, setFiveKReviewIdx] = useState(0);
   const [fiveKAssociations, setFiveKAssociations] = useState({}); // {wordIdx: "association text"}
   // Demo word bank — in production, comes from backend frequency list
-  const fiveKWordBank = [
-    { en: "what",  trans: "무엇",     roman: "mu-eot",        region: "KO-KR", example: "What is that?" },
-    { en: "go",    trans: "가다",     roman: "ga-da",         region: "KO-KR", example: "Let's go now." },
-    { en: "their", trans: "그들의",   roman: "geu-deur-ui",   region: "KO-KR", example: "This is their room." },
-    { en: "make",  trans: "만들다",   roman: "man-deul-da",   region: "KO-KR", example: "I'll make dinner." },
-    { en: "want",  trans: "원하다",   roman: "won-ha-da",     region: "KO-KR", example: "I want coffee." },
-    { en: "know",  trans: "알다",     roman: "al-da",         region: "KO-KR", example: "I don't know yet." },
-    { en: "take",  trans: "가지다",   roman: "ga-ji-da",      region: "KO-KR", example: "Take this with you." },
-    { en: "see",   trans: "보다",     roman: "bo-da",         region: "KO-KR", example: "Can you see it?" },
-    { en: "come",  trans: "오다",     roman: "o-da",          region: "KO-KR", example: "Come here, please." },
-    { en: "think", trans: "생각하다", roman: "saeng-gak-ha-da", region: "KO-KR", example: "I'll think about it." },
-    { en: "find",  trans: "찾다",     roman: "chat-da",       region: "KO-KR", example: "Did you find it?" },
-    { en: "give",  trans: "주다",     roman: "ju-da",         region: "KO-KR", example: "Give it to me." },
-    { en: "tell",  trans: "말하다",   roman: "mal-ha-da",     region: "KO-KR", example: "Tell me everything." },
-    { en: "work",  trans: "일하다",   roman: "il-ha-da",      region: "KO-KR", example: "I work on Mondays." },
-    { en: "call",  trans: "부르다",   roman: "bu-reu-da",     region: "KO-KR", example: "Call me tonight." },
-    { en: "try",   trans: "시도하다", roman: "si-do-ha-da",   region: "KO-KR", example: "Just try once." },
-    { en: "ask",   trans: "묻다",     roman: "mut-da",        region: "KO-KR", example: "Ask the waiter." },
-    { en: "feel",  trans: "느끼다",   roman: "neu-kki-da",    region: "KO-KR", example: "How do you feel?" },
-    { en: "leave", trans: "떠나다",   roman: "tteo-na-da",    region: "KO-KR", example: "We leave at six." },
-    { en: "stay",  trans: "머무르다", roman: "meo-mu-reu-da", region: "KO-KR", example: "Stay a little longer." },
-  ];
+  const fiveKWordBank = FIVEK_BANK_BY_LANG[activeLang] || FIVEK_BANK_KO;
   // The active session is a slice of the bank from current lifetime count forward
   const fiveKLifetime = dailyModules.find((m) => m.id === "fiveK")?.lifetime || 0;
   const fiveKWords = fiveKWordBank.slice(0, fiveKSessionSize);
@@ -9799,18 +9906,8 @@ export default function YourPhrasesFlow() {
     const ns = knew ? Math.min((stage ?? 0) + 1, SRS_INTERVALS_DAYS.length - 1) : 0;
     return { stage: ns, dueAt: Date.now() + SRS_INTERVALS_DAYS[ns] * DAY_MS, lastReviewedAt: Date.now() };
   };
-  const [wordSchedule, setWordSchedule] = useState(() => {
-    const now = Date.now();
-    return [
-      { id: "house",  en: "house",  trans: "집",     roman: "jip",      region: "KO-KR", hook: "집 (jip) → a JEEP parked outside your HOUSE.",                 stage: 2, dueAt: now - 1.0 * DAY_MS, lastReviewedAt: now - 8 * DAY_MS },
-      { id: "water",  en: "water",  trans: "물",     roman: "mul",      region: "KO-KR", hook: "물 (mul) → a 'MOO'-cow gulps down WATER.",                     stage: 1, dueAt: now - 2.0 * DAY_MS, lastReviewedAt: now - 6 * DAY_MS },
-      { id: "friend", en: "friend", trans: "친구",    roman: "chin-gu",  region: "KO-KR", hook: "친구 (chin-gu) → a FRIEND chucks you on the CHIN, all goo-ey.", stage: 3, dueAt: now - 0.5 * DAY_MS, lastReviewedAt: now - 9 * DAY_MS },
-      { id: "time",   en: "time",   trans: "시간",    roman: "si-gan",   region: "KO-KR", hook: "시간 (si-gan) → 'SEE-gone' — TIME, once you SEE it, it's GONE.", stage: 1, dueAt: now - 3.0 * DAY_MS, lastReviewedAt: now - 7 * DAY_MS },
-      { id: "food",   en: "food",   trans: "음식",    roman: "eum-sik",  region: "KO-KR", hook: "음식 (eum-sik) → 'um, SEEK' — you SEEK something to eat.",      stage: 0, dueAt: now - 1.0 * DAY_MS, lastReviewedAt: now - 2 * DAY_MS },
-      // Scheduled into the future — NOT due yet, so it won't appear today.
-      { id: "job",    en: "job",    trans: "직업",    roman: "jig-eop",  region: "KO-KR", hook: null,                                                          stage: 4, dueAt: now + 20 * DAY_MS, lastReviewedAt: now - 4 * DAY_MS },
-    ];
-  });
+  const [wordSchedule, setWordSchedule] = useState(() => FIVEK_SCHED(activeLang, Date.now(), DAY_MS));
+  useEffect(() => { setWordSchedule(FIVEK_SCHED(activeLang, Date.now(), DAY_MS)); }, [activeLang]);
 
   // Words whose next review is due now (most overdue first).
   const fiveKDueWords = wordSchedule
@@ -9926,59 +10023,7 @@ export default function YourPhrasesFlow() {
   // ============================================================
   // Demo phrase bank — production should pull from user's learned phrases.
   // Each word has a `text` and `phon` (phonetic syllabification).
-  const pronunciationPhrases = [
-    {
-      words: [
-        { text: "안녕하세요",  phon: "an-nyeong-ha-se-yo" },
-        { text: "만나서",      phon: "man-na-seo" },
-        { text: "반갑습니다.",  phon: "ban-gap-seum-ni-da" },
-      ],
-      en: "Hello, nice to meet you.",
-      region: "KO-KR",
-    },
-    {
-      words: [
-        { text: "화장실이",   phon: "hwa-jang-sir-i" },
-        { text: "어디예요?",  phon: "eo-di-ye-yo" },
-      ],
-      en: "Where is the bathroom?",
-      region: "KO-KR",
-    },
-    {
-      words: [
-        { text: "제",        phon: "je" },
-        { text: "이름은",     phon: "i-reum-eun" },
-        { text: "후안이에요.", phon: "hu-an-i-e-yo" },
-      ],
-      en: "My name is Juan.",
-      region: "KO-KR",
-    },
-    {
-      words: [
-        { text: "얼마",   phon: "eol-ma" },
-        { text: "예요?",  phon: "ye-yo" },
-      ],
-      en: "How much is it?",
-      region: "KO-KR",
-    },
-    {
-      words: [
-        { text: "너무",     phon: "neo-mu" },
-        { text: "배고파요.", phon: "bae-go-pa-yo" },
-      ],
-      en: "I'm very hungry.",
-      region: "KO-KR",
-    },
-    {
-      words: [
-        { text: "한국어를", phon: "han-gug-eo-reul" },
-        { text: "조금",     phon: "jo-geum" },
-        { text: "해요.",    phon: "hae-yo" },
-      ],
-      en: "I speak a little Korean.",
-      region: "KO-KR",
-    },
-  ];
+  const pronunciationPhrases = PRON_BY_LANG[activeLang] || PRON_KO;
 
   // Session/state
   const [pronunciationIdx, setPronunciationIdx] = useState(0);
@@ -11331,7 +11376,7 @@ export default function YourPhrasesFlow() {
             />
           )}
           {screen === "pronunciationTransition" && (
-            <PronunciationTransitionScreen onContinue={finalizePronunciationSession} />
+            <PronunciationTransitionScreen words={pronunciationPhrases.flatMap((p) => p.words.map((w) => w.text)).slice(0, 5)} onContinue={finalizePronunciationSession} />
           )}
 
           {/* ============= RECALL (solo sparring) ============= */}
@@ -11663,7 +11708,7 @@ export default function YourPhrasesFlow() {
           )}
           {screen === "pvpPlay" && pvpRival && (
             <TypedPvpPlay
-              cards={MOCK_CARDS}
+              cards={getCards()}
               rival={pvpRival}
               me={pvpMe}
               onFinish={(result) => {
@@ -15551,7 +15596,9 @@ const FiveKWordScreen = ({ word, wordIdx, total, deckCount, onNext, onBack }) =>
   };
 
   // AI-generated association fillers — covers the full 20-word demo bank
-  const aiSuggestions = {
+  const hookLang = (word?.region || "").toLowerCase().startsWith("es") ? "es" : "ko";
+  const AI_HOOKS = {
+    ko: {
     "what":  "무엇 (mu-eot) → a cow says 'MOO… WHAT?' when it's confused. Moo-eot = what?",
     "go":    "가다 (ga-da) → 'GOTTA!' — you GOTTA GO. Gah-da, let's go.",
     "their": "그들의 (geu-deul-ui) → 'GOOD-DEAL' — THEIR stuff is always a good deal.",
@@ -15572,7 +15619,31 @@ const FiveKWordScreen = ({ word, wordIdx, total, deckCount, onNext, onBack }) =>
     "feel":  "느끼다 (neu-kki-da) → 'NU-key' — you FEEL around for the NEW KEY in your pocket.",
     "leave": "떠나다 (tteo-na-da) → 'tuh-NA' — 'ta-ta now!' you wave as you LEAVE.",
     "stay":  "머무르다 (meo-mu-reu-da) → 'maw-MOO' — the cow (moo) won't budge — it wants to STAY.",
+  },
+    es: {
+      "what":  "qué → sounds like 'K'. You mishear someone and blurt 'K…? K WHAT?' — qué = WHAT.",
+      "go":    "ir → sounds like 'EAR'. Follow your EAR toward the music and GO to it. ir = to GO.",
+      "their": "su → sounds like 'SUE'. That bag? It's SUE's — it's THEIR stuff. su = their / his / her.",
+      "make":  "hacer → 'ah-SAIR'. 'I'll MAKE it, I swear!' (a-SER). hacer = to MAKE / do.",
+      "want":  "querer → 'keh-RARE'. You only WANT what's RARE and hard to get. querer = to WANT.",
+      "know":  "saber → 'sah-BAIR'. A wise old SABER-tooth tiger KNOWS everything. saber = to KNOW.",
+      "take":  "tomar → 'toh-MAR'. You reach out and TAKE a TOMato off the shelf. tomar = to TAKE.",
+      "see":   "ver → sounds like 'VERY'. Now you SEE it VERY clearly. ver = to SEE.",
+      "come":  "venir → 'ven-NEAR'. 'COME NEAR, come closer!' venir = to COME.",
+      "think": "pensar → grab a PEN. You THINK best with a PEN in your hand. pensar = to THINK.",
+      "find":  "encontrar → 'en-con-TRAR'. You FIND your keys right ON the COUNTER. encontrar = to FIND.",
+      "give":  "dar → sounds like 'DARE'. 'Here — I DARE to GIVE it all away.' dar = to GIVE.",
+      "tell":  "decir → 'deh-SEER'. You have a burning DESIRE to TELL the secret. decir = to TELL / say.",
+      "work":  "trabajar → 'TROUBLE? HA!'. Even with TROUBLE, you just HA and get to WORK. trabajar = to WORK.",
+      "call":  "llamar → 'ya-MAR'. You CALL out across the house: 'YA, MA!' llamar = to CALL.",
+      "try":   "intentar → it's your INTENT. You set your INTENT, then you TRY. intentar = to TRY.",
+      "ask":   "preguntar → 'pre-GUN-tar'. Before (pre) the starting GUN, you ASK 'wait, ready?' preguntar = to ASK.",
+      "feel":  "sentir → sounds like 'SENSE'. Your SENSES let you FEEL. sentir = to FEEL.",
+      "leave": "salir → 'SAIL-eer'. You SAIL out of the harbor — you LEAVE. salir = to LEAVE / go out.",
+      "stay":  "quedarse → 'keh-DAR-seh'. 'Okay, DARLING — STAY.' quedarse = to STAY.",
+    },
   };
+  const aiSuggestions = AI_HOOKS[hookLang] || AI_HOOKS.ko;
   const generateAI = () => {
     const fallback = `Imagine the word "${word.en}" appearing in the sky as you say "${word.trans}" out loud.`;
     setAssociation(aiSuggestions[word.en] || fallback);
@@ -17215,6 +17286,8 @@ const BonusModeStarTwinkles = () => {
 const PronunciationPracticeScreen = ({ phrase, phraseIdx, total, isReturning, onAdvance, onBack }) => {
   const [phase, setPhase] = useState("native-playing");
   const [activeWordIdx, setActiveWordIdx] = useState(null);
+  const [tappedIdx, setTappedIdx] = useState(null);
+  useEffect(() => { setTappedIdx(null); }, [phraseIdx]);
   // Tracks audio playing manually (i.e. via replay buttons in 'ready' or 'compare').
   // Separate from `phase` so the auto-flow state machine isn't tangled with manual taps.
   // Drives the waveform color/active state during user-initiated playback.
@@ -17418,6 +17491,7 @@ const PronunciationPracticeScreen = ({ phrase, phraseIdx, total, isReturning, on
     if (phase === "recording") return; // never interrupt recording
     if (manualPlay !== null) return;   // don't overlap with manual replays
     setActiveWordIdx(i);
+    setTappedIdx(i);
     try { window.speechSynthesis?.cancel(); } catch (e) {}
     const w = phrase.words[i];
     const cleanText = w.text.replace(/[¿?¡!.,]/g, "");
@@ -17632,13 +17706,26 @@ const PronunciationPracticeScreen = ({ phrase, phraseIdx, total, isReturning, on
               })}
             </div>
 
-            {/* Discovery hint at bottom */}
-            <div
-              className="font-display font-semibold text-center mt-3"
-              style={{ fontSize: 10, color: "rgba(122, 74, 26, 0.55)", letterSpacing: "0.06em" }}
-            >
-              ✦ tap any word to hear it ✦
-            </div>
+            {/* Tap a word → hear it AND see its meaning in your base language */}
+            {tappedIdx !== null && phrase.words[tappedIdx]?.gloss ? (
+              <div className="text-center mt-3" style={{ minHeight: 22 }}>
+                <span
+                  className="font-body font-bold"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "#1A8F6E", background: "rgba(26,143,110,0.1)", borderRadius: 14, padding: "4px 12px" }}
+                >
+                  <span style={{ fontWeight: 800, color: "#3D2A05" }}>{phrase.words[tappedIdx].text.replace(/[¿?¡!.,]/g, "")}</span>
+                  <span style={{ opacity: 0.5 }}>=</span>
+                  {phrase.words[tappedIdx].gloss}
+                </span>
+              </div>
+            ) : (
+              <div
+                className="font-display font-semibold text-center mt-3"
+                style={{ fontSize: 10, color: "rgba(122, 74, 26, 0.55)", letterSpacing: "0.06em", minHeight: 22 }}
+              >
+                ✦ tap any word to hear it &amp; see its meaning ✦
+              </div>
+            )}
           </div>
         </div>
 
@@ -18794,8 +18881,20 @@ const PronunciationIntroHowScreen = ({ onContinue, onBack }) => {
                      Warm the Puffling up for battle."
    Puffling is pinned at fixed position so it doesn't jump between phases.
    ============================================================ */
-const PronunciationTransitionScreen = ({ onContinue }) => {
+const PronunciationTransitionScreen = ({ onContinue, words }) => {
   const [phase, setPhase] = useState("speaking");
+
+  // The stiff "robotic speech" bubbles use the words the learner just practiced,
+  // so they always match the active language (falls back to a demo phrase only
+  // if none were passed). Positions/delays are fixed; we map words onto them.
+  const BUBBLE_POS = [
+    { top: -6,  left: -30, delay: "0.2s" },
+    { top: -14, left: 20,  delay: "0.7s" },
+    { top: -2,  left: 70,  delay: "1.2s" },
+    { top: 28,  left: -50, delay: "1.7s" },
+    { top: 50,  left: 90,  delay: "2.2s" },
+  ];
+  const bubbleWords = ((words && words.length ? words : ["No", "me", "gusta", "acostarme", "tarde."])).slice(0, 5);
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase("reveal"), 2400);
@@ -18831,11 +18930,9 @@ const PronunciationTransitionScreen = ({ onContinue }) => {
                 Each bubble has its own delay so they appear sequentially. */}
             {phase !== "cta" && (
               <>
-                <WordBubble text="No" top={-6}  left={-30}  delay="0.2s" />
-                <WordBubble text="me" top={-14} left={20}  delay="0.7s" />
-                <WordBubble text="gusta" top={-2}   left={70}  delay="1.2s" />
-                <WordBubble text="acostarme" top={28}  left={-50} delay="1.7s" />
-                <WordBubble text="tarde." top={50}  left={90}  delay="2.2s" />
+                {bubbleWords.map((w, i) => (
+                  <WordBubble key={i} text={w} top={BUBBLE_POS[i].top} left={BUBBLE_POS[i].left} delay={BUBBLE_POS[i].delay} />
+                ))}
               </>
             )}
           </div>
@@ -23699,8 +23796,8 @@ const ShadowIntroHowScreen = ({ onContinue, onBack }) => {
             icon="🎮"
             iconBg="linear-gradient(180deg, #FFD97A 0%, #F5A820 100%)"
             iconShadow="#9C6510"
-            title="Optional: pick a game"
-            body="Stack a bamboo tower or dash over obstacles — two cozy mini-games to play during your reps."
+            title="Optional: a bonus game"
+            body="Want something for your hands? Play a cozy game while you shadow. It earns coins for the shop but has zero effect on your training — skip it anytime."
             delay="480ms"
           />
         </div>
@@ -23863,6 +23960,7 @@ const ModePickerPill = ({ mode, selected, icon, title, desc, onClick }) => (
 );
 
 const ShadowKataScreen = ({ onBack, onComplete, isReturning }) => {
+  const SHADOW_PHRASES = getShadow();
   // Audio session state
   const [phraseIdx, setPhraseIdx] = useState(0);
   const [playIdx, setPlayIdx]     = useState(0);
@@ -25628,13 +25726,19 @@ const ShadowKataScreen = ({ onBack, onComplete, isReturning }) => {
           }}>
             {/* Mode picker — three pills, user taps to select which session
                 style they want. Selection commits when they press START. */}
-            <div className="flex flex-col gap-2 mb-5" style={{ width: 240 }}>
+            <div className="text-center mb-3" style={{ maxWidth: 248 }}>
+              <div className="font-display font-bold" style={{ fontSize: 16, color: "#FFFFFF", textShadow: "0 2px 4px rgba(0,0,0,0.45)" }}>Add a game while you shadow?</div>
+              <div className="font-body font-semibold" style={{ fontSize: 12, color: "rgba(255,238,196,0.8)", lineHeight: 1.4, marginTop: 4 }}>
+                Optional — just earns <b style={{ color: "#FFD83A" }}>shop coins</b>. Speaking along is the real training.
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 mb-4" style={{ width: 240 }}>
               <ModePickerPill
                 mode="kata"
                 selected={selectedMode === "kata"}
                 icon="🥋"
                 title="Kata"
-                desc="Stack a tower of boards"
+                desc="Bonus game · stack boards"
                 onClick={() => setSelectedMode("kata")}
               />
               <ModePickerPill
@@ -25642,7 +25746,7 @@ const ShadowKataScreen = ({ onBack, onComplete, isReturning }) => {
                 selected={selectedMode === "dash"}
                 icon="🎋"
                 title="Bamboo Dash"
-                desc="Cozy runner — jump over obstacles"
+                desc="Bonus game · cozy runner"
                 onClick={() => setSelectedMode("dash")}
               />
               <ModePickerPill
@@ -25650,7 +25754,7 @@ const ShadowKataScreen = ({ onBack, onComplete, isReturning }) => {
                 selected={selectedMode === "audio"}
                 icon="🎧"
                 title="Audio Only"
-                desc="Just the shadowing"
+                desc="No game · just the training"
                 onClick={() => setSelectedMode("audio")}
               />
             </div>
