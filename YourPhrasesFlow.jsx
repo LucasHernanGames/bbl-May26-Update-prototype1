@@ -1037,6 +1037,8 @@ const SOUND_FILES = {
   progress:         "progress.mp3",         // mid-session progress / milestone popup
   "last-one":       "last-one.mp3",         // the "LAST ONE!" encouragement popup
   "flash-correct":  "flash-correct.mp3",    // 5K flashcard — got it
+  "cta":            "Call-to-action.wav",   // yellow primary CTA buttons in a module
+  "reps-summary":   "New-reps-phrases.mp3",  // end-of-module summary — reps/words reveal
   "flash-wrong":    "flash-wrong.mp3",      // 5K flashcard — missed it
 };
 
@@ -1047,6 +1049,7 @@ const _synthFallbackFor = {
   phrasebook: "tap", coins: "confirm", progress: "confirm",
   "flash-correct": "confirm", "flash-wrong": "back",
   "last-one": "confirm",
+  cta: "confirm", "reps-summary": "confirm",
 };
 
 const _soundBuffers = {}; // slug -> decoded AudioBuffer
@@ -1316,7 +1319,7 @@ const ProgressBar = ({ value }) => (
 /* ============================================================
    PRIMARY BUTTON
    ============================================================ */
-const PrimaryBtn = ({ children, onClick, disabled, pulse = false, sound = "continue" }) => (
+const PrimaryBtn = ({ children, onClick, disabled, pulse = false, sound = "cta" }) => (
   <button
     onClick={onClick}
     disabled={disabled}
@@ -6291,8 +6294,9 @@ const RecallResult = ({
 }) => {
   // Count-up animations (staggered so each reveal lands in sequence)
   const displayedReps  = useCountUp(repsBefore, repsAfter, 1400, 300);
-  const displayedCoins = useCountUp(coinsBefore, coinsAfter, 1100, 1100);
   const displayedEarnedReps = useCountUp(0, repsEarned, 1400, 300);
+  // Coins climb from zero, starting just after the reps tally lands — sequential reveal.
+  const displayedEarnedCoins = useCountUp(0, coinsEarned, 1100, 1900);
 
   // Once each counter lands, flip a flag so we can fire the sparkle / coin-
   // shower bursts. Visual feedback that the climb is complete.
@@ -6303,7 +6307,19 @@ const RecallResult = ({
     return () => clearTimeout(t);
   }, []);
   useEffect(() => {
-    const t = setTimeout(() => { setCoinsLanded(true); if (coinsEarned > 0) playSound("coins"); }, 1100 + 1100);
+    const t = setTimeout(() => setCoinsLanded(true), 1900 + 1100);
+    return () => clearTimeout(t);
+  }, []);
+  // Reps-summary chime — fires as the new-reps tally starts counting up from zero.
+  useEffect(() => {
+    if (!(won && repsEarned > 0)) return;
+    const t = setTimeout(() => playSound("reps-summary"), 300);
+    return () => clearTimeout(t);
+  }, []);
+  // Coins chime — fires as the coins tally starts climbing, right after reps land.
+  useEffect(() => {
+    if (!(won && coinsEarned > 0)) return;
+    const t = setTimeout(() => playSound("coins"), 1900);
     return () => clearTimeout(t);
   }, []);
 
@@ -6530,7 +6546,7 @@ const RecallResult = ({
           <div className="mt-2.5 flex justify-center pop">
             <div className="inline-flex items-center gap-2 rounded-full px-4 py-2" style={{ background: "linear-gradient(180deg, #FFF4C8 0%, #FFE89A 100%)", border: "1.5px solid #D4A81F", boxShadow: "0 3px 0 rgba(168,127,15,0.18)" }}>
               <GoldCoin size={20} />
-              <span className="font-display font-bold" style={{ fontSize: 17, color: "#3D2A05", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>+{coinsEarned}</span>
+              <span className="font-display font-bold" style={{ fontSize: 17, color: "#3D2A05", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>+{displayedEarnedCoins}</span>
               <span className="font-body font-bold uppercase" style={{ fontSize: 9, color: "#7A5410", letterSpacing: "0.12em" }}>coins</span>
             </div>
           </div>
@@ -14982,6 +14998,7 @@ const FinishScreen = ({ pufflingState, reps, sessionDone, dailyDone, dailyGoal, 
     if (!isModuleComplete || stage !== "celebrate") return;
     setDisplayReps(0);
     const startDelay = setTimeout(() => {
+      if (reps > 0) playSound("reps-summary");
       const duration = 1400; // ms
       const steps = Math.min(reps, 30); // cap step count for visual smoothness
       const stepTime = duration / steps;
@@ -16409,11 +16426,18 @@ const FiveKCompleteScreen = ({ wordsAdded, lifetime, lifetimeTarget, onFinish })
     requestAnimationFrame(tick);
   }, [wordsAdded]);
 
-  // Coin count-up — starts a beat later, lands with the coin shower
+  // Words-added summary chime — fires as the "new today" counter starts climbing from zero.
+  useEffect(() => {
+    if (wordsAdded <= 0) return;
+    const t = setTimeout(() => playSound("reps-summary"), 80);
+    return () => clearTimeout(t);
+  }, [wordsAdded]);
+
+  // Coin count-up — starts after the word tally lands, so the two reveal in sequence
   useEffect(() => {
     const start = Date.now();
     const duration = 1000;
-    const delay = 700;
+    const delay = 1000;
     let raf;
     const tick = () => {
       const elapsed = Date.now() - start - delay;
@@ -16430,7 +16454,7 @@ const FiveKCompleteScreen = ({ wordsAdded, lifetime, lifetimeTarget, onFinish })
   // Coins reward sound — fires as the coin counter lands (delay + duration).
   useEffect(() => {
     if (wordsAdded <= 0) return;
-    const t = setTimeout(() => playSound("coins"), 700 + 1000);
+    const t = setTimeout(() => playSound("coins"), 1000);
     return () => clearTimeout(t);
   }, [wordsAdded]);
 
@@ -18444,16 +18468,46 @@ const AudioTrack = ({ kind, label, icon, active, onTap }) => {
    ============================================================ */
 const PronunciationCompleteScreen = ({ repsAdded, onFinish }) => {
   const coinsEarned = repsAdded; // 1 coin per rep
+  const [displayReps, setDisplayReps] = useState(0);
   const [displayCoins, setDisplayCoins] = useState(0);
   const [coinPop, setCoinPop] = useState(false);
   const [shower, setShower] = useState([]);
+
+  // Reps count-up from zero — the first beat of the reveal.
+  useEffect(() => {
+    const start = setTimeout(() => {
+      const duration = 900;
+      const steps = Math.min(repsAdded, 40) || 1;
+      const stepTime = duration / steps;
+      let cur = 0;
+      const tick = () => {
+        cur += 1;
+        setDisplayReps(Math.round((cur / steps) * repsAdded));
+        if (cur < steps) setTimeout(tick, stepTime);
+      };
+      tick();
+    }, 150);
+    return () => clearTimeout(start);
+  }, [repsAdded]);
+  // Reps-summary chime as the reps tally starts climbing.
+  useEffect(() => {
+    if (repsAdded <= 0) return;
+    const t = setTimeout(() => playSound("reps-summary"), 150);
+    return () => clearTimeout(t);
+  }, [repsAdded]);
+  // Coins chime as the coin tally starts climbing, right after reps land.
+  useEffect(() => {
+    if (coinsEarned <= 0) return;
+    const t = setTimeout(() => playSound("coins"), 1250);
+    return () => clearTimeout(t);
+  }, [coinsEarned]);
 
   // Coin shower + count-up — the dopamine beat once the reps card has landed.
   useEffect(() => {
     const drops = Array.from({ length: 9 }, (_, i) => ({
       id: i,
       left: 6 + (i * 88) / 8 + (Math.random() * 6 - 3), // spread across the card
-      delay: 700 + i * 70,
+      delay: 1250 + i * 70,
       size: 15 + Math.round(Math.random() * 11),
     }));
     setShower(drops);
@@ -18467,10 +18521,10 @@ const PronunciationCompleteScreen = ({ repsAdded, onFinish }) => {
         cur += 1;
         setDisplayCoins(Math.round((cur / steps) * coinsEarned));
         if (cur < steps) setTimeout(tick, stepTime);
-        else { setCoinPop(true); if (coinsEarned > 0) playSound("coins"); setTimeout(() => setCoinPop(false), 500); }
+        else { setCoinPop(true); setTimeout(() => setCoinPop(false), 500); }
       };
       tick();
-    }, 750);
+    }, 1250);
     return () => clearTimeout(start);
   }, [coinsEarned]);
 
@@ -18520,7 +18574,7 @@ const PronunciationCompleteScreen = ({ repsAdded, onFinish }) => {
               Reps
             </div>
             <div className="font-display font-bold mt-0.5" style={{ fontSize: 30, color: "#3D2A05", lineHeight: 1 }}>
-              +{repsAdded}
+              +{displayReps}
             </div>
           </div>
 
@@ -25761,6 +25815,7 @@ const ShadowKataScreen = ({ onBack, onComplete, isReturning }) => {
 
             <button
               onClick={startSession}
+              data-sound="cta"
               className="tactile font-display font-bold flex items-center justify-center gap-2"
               style={{
                 padding: "16px 32px", borderRadius: 18,
@@ -25983,9 +26038,18 @@ const ShadowSummary = ({ totalBoards, totalPerfects, bestTower, score, sessionMo
   // Coins reward sound — both summary layouts (kata + dash/audio) show the same
   // "Coins earned" card with a coin-drop animation landing ~600ms after mount.
   const shadowCoins = (totalReps || 0) + (dashCoins || 0);
+  // Reps climb from zero first, then coins — same sequenced reveal as every
+  // other module's completion screen.
+  const displayReps  = useCountUp(0, totalReps || 0, 900, 150);
+  const displayCoins = useCountUp(0, shadowCoins, 1000, 1300);
+  useEffect(() => {
+    if ((totalReps || 0) <= 0) return;
+    const t = setTimeout(() => playSound("reps-summary"), 150);
+    return () => clearTimeout(t);
+  }, [totalReps]);
   useEffect(() => {
     if (shadowCoins <= 0) return;
-    const t = setTimeout(() => playSound("coins"), 600);
+    const t = setTimeout(() => playSound("coins"), 1300);
     return () => clearTimeout(t);
   }, [shadowCoins]);
 
@@ -26024,12 +26088,12 @@ const ShadowSummary = ({ totalBoards, totalPerfects, bestTower, score, sessionMo
               <>
                 <SummaryStat icon="🎋" label="Total" value={`${dashDistance}m`} />
                 <SummaryStat icon="🔥" label="Best Streak" value={`${dashBestStreak}m`} accent />
-                <SummaryStat icon="🔁" label="Reps" value={totalReps} />
+                <SummaryStat icon="🔁" label="Reps" value={displayReps} />
               </>
             ) : (
               <>
                 <SummaryStat icon="💬" label="Phrases" value={phrasesCount} />
-                <SummaryStat icon="🔁" label="Reps" value={totalReps} accent />
+                <SummaryStat icon="🔁" label="Reps" value={displayReps} accent />
               </>
             )}
           </div>
@@ -26037,14 +26101,14 @@ const ShadowSummary = ({ totalBoards, totalPerfects, bestTower, score, sessionMo
           {/* Coins earned — 1 per rep */}
           <div className="relative flex items-center gap-2.5 mb-7 rounded-2xl px-5 py-3 pop overflow-hidden" style={{ background: "linear-gradient(180deg, #FFF4C8 0%, #FFE89A 100%)", border: "1.5px solid #D4A81F", boxShadow: "0 4px 0 rgba(168,127,15,0.25)" }}>
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="absolute pointer-events-none" style={{ top: -12, left: `${12 + i * 14}%`, animation: `coinDrop 1s ease-in ${300 + i * 90}ms both` }}>
+              <div key={i} className="absolute pointer-events-none" style={{ top: -12, left: `${12 + i * 14}%`, animation: `coinDrop 1s ease-in ${1300 + i * 90}ms both` }}>
                 <GoldCoin size={13 + (i % 2) * 4} />
               </div>
             ))}
             <GoldCoin size={30} />
             <div className="relative" style={{ zIndex: 2 }}>
               <div className="font-body font-bold uppercase" style={{ fontSize: 9, color: "#7A5410", letterSpacing: "0.16em" }}>Coins earned</div>
-              <div className="font-display font-bold" style={{ fontSize: 22, color: "#3D2A05", lineHeight: 1.1 }}>+{totalReps + dashCoins}</div>
+              <div className="font-display font-bold" style={{ fontSize: 22, color: "#3D2A05", lineHeight: 1.1 }}>+{displayCoins}</div>
               {dashCoins > 0 && (
                 <div className="font-body font-bold inline-flex items-center gap-1" style={{ fontSize: 9.5, color: "#7A5410" }}>incl. +{dashCoins} from Bamboo Dash <GoldCoin size={11} /></div>
               )}
@@ -26143,14 +26207,14 @@ const ShadowSummary = ({ totalBoards, totalPerfects, bestTower, score, sessionMo
         {/* Coins earned — 1 per rep */}
         <div className="relative flex items-center gap-2.5 w-full max-w-xs mb-6 rounded-2xl px-5 py-3 pop overflow-hidden" style={{ background: "linear-gradient(180deg, #FFF4C8 0%, #FFE89A 100%)", border: "1.5px solid #D4A81F", boxShadow: "0 4px 0 rgba(168,127,15,0.25)" }}>
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="absolute pointer-events-none" style={{ top: -12, left: `${12 + i * 14}%`, animation: `coinDrop 1s ease-in ${300 + i * 90}ms both` }}>
+            <div key={i} className="absolute pointer-events-none" style={{ top: -12, left: `${12 + i * 14}%`, animation: `coinDrop 1s ease-in ${1300 + i * 90}ms both` }}>
               <GoldCoin size={13 + (i % 2) * 4} />
             </div>
           ))}
           <GoldCoin size={30} />
           <div className="relative" style={{ zIndex: 2 }}>
             <div className="font-body font-bold uppercase" style={{ fontSize: 9, color: "#7A5410", letterSpacing: "0.16em" }}>Coins earned</div>
-            <div className="font-display font-bold" style={{ fontSize: 22, color: "#3D2A05", lineHeight: 1.1 }}>+{totalReps + dashCoins}</div>
+            <div className="font-display font-bold" style={{ fontSize: 22, color: "#3D2A05", lineHeight: 1.1 }}>+{displayCoins}</div>
             {dashCoins > 0 && (
               <div className="font-body font-bold inline-flex items-center gap-1" style={{ fontSize: 9.5, color: "#7A5410" }}>incl. +{dashCoins} from the tower <GoldCoin size={11} /></div>
             )}
