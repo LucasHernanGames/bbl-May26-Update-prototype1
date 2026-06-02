@@ -2080,6 +2080,22 @@ const MOCK_CARDS_KO = [
   { es: "영어 할 줄 알아요?",     roman: "yeong-eo hal jul ar-a-yo",     say: "yuhng-uh hahl jool ah-rah-yoh",   en: "Do you speak English?",    dueInDays: -2, distractors: ["영어 할 줄 몰라요?", "영어 할 수 알아요?", "영어 하고 알아요?"] },
   { es: "어디에 살아요?",         roman: "eo-di-e sar-a-yo",             say: "uh-dee-eh sah-rah-yoh",           en: "Where do you live?",       dueInDays: -1, distractors: ["어디에 가요?", "어디에 살았어요?", "어디에서 살까요?"] },
   { es: "만나서 반가워요",        roman: "man-na-seo ban-ga-wo-yo",      say: "mahn-nah-suh bahn-gah-wuh-yoh",   en: "Nice to meet you",         dueInDays: 2,  distractors: ["만나서 반가웠어요", "만나서 고마워요", "만나고 반가워요"] },
+  // --- Upcoming review cards (drawn soonest-first as the due pile empties) ---
+  { es: "정말 감사합니다", roman: "jeong-mal gam-sa-ham-ni-da", say: "juhng-mahl gahm-sah-hahm-nee-dah", en: "Thank you very much", dueInDays: 1, distractors: ["정말 미안합니다", "정말 감사했어요", "정말 고맙겠습니다"] },
+  { es: "죄송합니다", roman: "joe-song-ham-ni-da", say: "jweh-song-hahm-nee-dah", en: "I'm sorry", dueInDays: 1, distractors: ["죄송했습니다", "미안하겠습니다", "죄송하세요"] },
+  { es: "내일 봐요", roman: "nae-il bwa-yo", say: "neh-eel bwah-yoh", en: "See you tomorrow", dueInDays: 2, distractors: ["내일 와요", "어제 봐요", "내일 자요"] },
+  { es: "이름이 뭐예요?", roman: "i-reum-i mwo-ye-yo", say: "ee-ruh-mee mwuh-yeh-yoh", en: "What's your name?", dueInDays: 2, distractors: ["이름이 어디예요?", "이름은 뭐 했어요?", "이름이 누구예요?"] },
+  { es: "계산서 주세요", roman: "gye-san-seo ju-se-yo", say: "gyeh-sahn-suh joo-seh-yoh", en: "The check, please", dueInDays: 3, distractors: ["계산서 있어요", "메뉴 주세요", "계산서 주셨어요"] },
+  { es: "맛있어요", roman: "ma-si-sseo-yo", say: "mah-shee-ssuh-yoh", en: "It's delicious", dueInDays: 3, distractors: ["맛없어요", "멋있어요", "맛있었네요"] },
+  { es: "피곤해요", roman: "pi-gon-hae-yo", say: "pee-gohn-heh-yoh", en: "I'm tired", dueInDays: 4, distractors: ["피곤했어요", "배고파요", "피곤하세요"] },
+  { es: "같이 가요", roman: "ga-chi ga-yo", say: "gah-chee gah-yoh", en: "Let's go together", dueInDays: 4, distractors: ["같이 와요", "혼자 가요", "같이 가세요"] },
+  { es: "잠깐만요", roman: "jam-kkan-man-yo", say: "jahm-kkahn-mah-nyoh", en: "Just a moment", dueInDays: 5, distractors: ["잠깐만이요", "조금만요", "잠깐만 했어요"] },
+  { es: "어떻게 지내요?", roman: "eo-tteo-ke ji-nae-yo", say: "uh-ttuh-keh jee-neh-yoh", en: "How are you?", dueInDays: 5, distractors: ["어떻게 지냈을까요?", "어디서 지내요?", "어떻게 가요?"] },
+  { es: "물 좀 주세요", roman: "mul jom ju-se-yo", say: "mool johm joo-seh-yoh", en: "Can I have water?", dueInDays: 6, distractors: ["물 좀 주셨어요", "물 좀 마셔요", "밥 좀 주세요"] },
+  { es: "너무 비싸요", roman: "neo-mu bi-ssa-yo", say: "nuh-moo bee-ssah-yoh", en: "It's too expensive", dueInDays: 6, distractors: ["너무 싸요", "너무 비쌌어요", "조금 비싸요"] },
+  { es: "이걸로 할게요", roman: "i-geol-lo hal-ge-yo", say: "ee-guhl-loh hahl-geh-yoh", en: "I'll take this one", dueInDays: 7, distractors: ["이걸로 했어요", "그걸로 할게요", "이걸로 갈게요"] },
+  { es: "역이 어디예요?", roman: "yeog-i eo-di-ye-yo", say: "yuh-gee uh-dee-yeh-yoh", en: "Where is the station?", dueInDays: 8, distractors: ["역이 언제예요?", "역을 어디예요?", "역이 어디 갔어요?"] },
+  { es: "오늘 날씨가 좋아요", roman: "o-neul nal-ssi-ga jo-a-yo", say: "oh-neul nahl-ssee-gah joh-ah-yoh", en: "Nice weather today", dueInDays: 10, distractors: ["오늘 날씨가 나빠요", "어제 날씨가 좋아요", "오늘 날씨가 좋았겠어요"] },
 ];
 
 const MOCK_CARDS_ES = [
@@ -2098,6 +2114,22 @@ const MOCK_CARDS_ES = [
   { es: "¿Hablas inglés?",          roman: "hablas ingles",           say: "AH-blahss een-GLESS",               en: "Do you speak English?",    dueInDays: -2, distractors: ["¿Hablo inglés?", "¿Hablas español?", "¿Hablar inglés?"] },
   { es: "¿Dónde vives?",            roman: "donde vives",             say: "DOHN-deh VEE-vess",                 en: "Where do you live?",       dueInDays: -1, distractors: ["¿Dónde vive?", "¿Cuándo vives?", "¿Dónde vivías?"] },
   { es: "Mucho gusto",              roman: "mucho gusto",             say: "MOO-choh GOOS-toh",                 en: "Nice to meet you",         dueInDays: 2,  distractors: ["Mucha gusto", "Mucho gusta", "Mucho gustó"] },
+  // --- Upcoming review cards (drawn soonest-first as the due pile empties) ---
+  { es: "Muchas gracias", roman: "muchas gracias", say: "MOO-chahss GRAH-syahss", en: "Thank you very much", dueInDays: 1, distractors: ["Muchos gracias", "Mucha gracias", "Muchas gracia"] },
+  { es: "Lo siento", roman: "lo siento", say: "loh SYEN-toh", en: "I'm sorry", dueInDays: 1, distractors: ["Le siento", "Lo siente", "Los siento"] },
+  { es: "Hasta mañana", roman: "hasta mañana", say: "AHS-tah mah-NYAH-nah", en: "See you tomorrow", dueInDays: 2, distractors: ["Hasta manana", "Hasta luego mañana", "Hasta mañanas"] },
+  { es: "¿Cómo te llamas?", roman: "como te llamas", say: "KOH-moh teh YAH-mahss", en: "What's your name?", dueInDays: 2, distractors: ["¿Cómo te llama?", "¿Cómo se llamas?", "¿Qué te llamas?"] },
+  { es: "La cuenta, por favor", roman: "la cuenta por favor", say: "lah KWEN-tah por fah-VOR", en: "The check, please", dueInDays: 3, distractors: ["El cuenta, por favor", "La cuento, por favor", "La cuenta, por favores"] },
+  { es: "Está delicioso", roman: "esta delicioso", say: "ess-TAH deh-lee-SYOH-soh", en: "It's delicious", dueInDays: 3, distractors: ["Es delicioso", "Está deliciosa", "Está delicio"] },
+  { es: "Estoy cansado", roman: "estoy cansado", say: "ess-TOY kahn-SAH-doh", en: "I'm tired", dueInDays: 4, distractors: ["Soy cansado", "Estoy cansando", "Estás cansado"] },
+  { es: "Vamos juntos", roman: "vamos juntos", say: "VAH-mohss HOON-tohss", en: "Let's go together", dueInDays: 4, distractors: ["Vamos junto", "Vámonos junto", "Vas juntos"] },
+  { es: "Un momento", roman: "un momento", say: "oon moh-MEN-toh", en: "Just a moment", dueInDays: 5, distractors: ["Una momento", "Un momentos", "El momento"] },
+  { es: "¿Cómo estás?", roman: "como estas", say: "KOH-moh ess-TAHSS", en: "How are you?", dueInDays: 5, distractors: ["¿Cómo está?", "¿Cómo estáis?", "¿Qué estás?"] },
+  { es: "¿Me da agua?", roman: "me da agua", say: "meh dah AH-gwah", en: "Can I have water?", dueInDays: 6, distractors: ["¿Me das agua?", "¿Me da aguas?", "¿Te da agua?"] },
+  { es: "Es muy caro", roman: "es muy caro", say: "ess mwee KAH-roh", en: "It's too expensive", dueInDays: 6, distractors: ["Es muy cara", "Está muy caro", "Es muy caros"] },
+  { es: "Me llevo este", roman: "me llevo este", say: "meh YEH-voh ESS-teh", en: "I'll take this one", dueInDays: 7, distractors: ["Me llevo esta", "Me lleva este", "Te llevo este"] },
+  { es: "¿Dónde está la estación?", roman: "donde esta la estacion", say: "DOHN-deh ess-TAH lah ess-tah-SYOHN", en: "Where is the station?", dueInDays: 8, distractors: ["¿Dónde es la estación?", "¿Cuándo está la estación?", "¿Dónde está el estación?"] },
+  { es: "Hoy hace buen tiempo", roman: "hoy hace buen tiempo", say: "oy AH-seh bwen TYEM-poh", en: "Nice weather today", dueInDays: 10, distractors: ["Hoy hace buen tiempos", "Hoy hizo buen tiempo", "Hoy hace buena tiempo"] },
 ];
 const MOCK_CARDS_BY_LANG = { ko: MOCK_CARDS_KO, es: MOCK_CARDS_ES };
 const getCards = () => MOCK_CARDS_BY_LANG[DATA_LANG.cur] || MOCK_CARDS_KO;
@@ -3927,7 +3959,7 @@ const InSparPlay = ({ onKO, onTimeOut, onYourKO, onEnd, onPause, resumeFrom, opp
 
   // How many DUE cards are still un-reviewed this session. Drives the
   // "CARDS LEFT" header indicator and the session-complete check.
-  const cardsInRotation = DUE_CARD_KEYS.filter((i) => !clearedCards.has(i)).length;
+  const cardsInRotation = MOCK_CARDS.map((_, i) => i).filter((i) => !clearedCards.has(i)).length;
 
   // Pick the next card to show, in spaced-repetition order:
   //   1. The soonest-due card the user hasn't gotten right yet this session
@@ -4361,9 +4393,14 @@ const InSparPlay = ({ onKO, onTimeOut, onYourKO, onEnd, onPause, resumeFrom, opp
     // recall session is COMPLETE the instant every DUE card has been reviewed
     // correctly once — card-driven, independent of the opponent's HP.
     const newClearedSet = computeClearedFrom(newCardCorrectCount);
-    const allDueCleared = DUE_CARD_KEYS.length > 0 && DUE_CARD_KEYS.every((k) => newClearedSet.has(k));
+    // Battle ends only when the ENTIRE review queue is cleared. As the due-now
+    // pile empties, pickNextCardKey draws the next-soonest UPCOMING review cards
+    // (due tomorrow, day after, …) in, so the fight keeps going through them.
+    // (Was "all DUE cleared", which ended the instant the due pile emptied —
+    // the abrupt win before upcoming cards were ever drawn.)
+    const allCleared = MOCK_CARDS.length > 0 && MOCK_CARDS.every((_, i) => newClearedSet.has(i));
 
-    const advanceDelay = (willKO || allDueCleared) ? 1700 : 1000;
+    const advanceDelay = (willKO || allCleared) ? 1700 : 1000;
     setTimeout(() => {
       // Keep the live cleared set in sync so a just-cleared card is instantly
       // out of rotation (never re-asked) and the "cards left" count is right.
@@ -4371,7 +4408,7 @@ const InSparPlay = ({ onKO, onTimeOut, onYourKO, onEnd, onPause, resumeFrom, opp
 
       // === SESSION COMPLETE — every due card reviewed correctly once. ===
       // Snap the opponent to 0 HP for a clean victory beat even if HP remained.
-      if (allDueCleared) {
+      if (allCleared) {
         sfx.ko();
         setTheirHp(0);
         const payload = { myHp, theirHp: 0, cardCount: cardIdx + 1, distinctCards: Object.keys(newCardCorrectCount).length, kos: willKO ? opponentIdx + 1 : opponentIdx, maxCombo: Math.max(maxCombo, newCombo), correctCount: correctCount + 1, facedOpponents: opponentList.slice(0, opponentIdx + 1) };
