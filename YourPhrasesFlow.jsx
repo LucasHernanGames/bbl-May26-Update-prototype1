@@ -1037,7 +1037,7 @@ const SOUND_FILES = {
   progress:         "progress.mp3",         // mid-session progress / milestone popup
   "last-one":       "last-one.mp3",         // the "LAST ONE!" encouragement popup
   "flash-correct":  "flash-correct.mp3",    // 5K flashcard — got it
-  "cta":            "Call-to-action.wav",   // yellow primary CTA buttons in a module
+  "cta":            "call-to-action.mp3",   // yellow primary CTA buttons in a module
   "reps-summary":   "New-reps-phrases.mp3",  // end-of-module summary — reps/words reveal
   "flash-wrong":    "flash-wrong.mp3",      // 5K flashcard — missed it
   "recall-flip":    "recall-flip.mp3",      // Recall — flipping a flashcard
