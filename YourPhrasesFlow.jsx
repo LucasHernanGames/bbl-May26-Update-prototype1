@@ -1040,6 +1040,7 @@ const SOUND_FILES = {
   "cta":            "Call-to-action.wav",   // yellow primary CTA buttons in a module
   "reps-summary":   "New-reps-phrases.mp3",  // end-of-module summary — reps/words reveal
   "flash-wrong":    "flash-wrong.mp3",      // 5K flashcard — missed it
+  "recall-flip":    "recall-flip.mp3",      // Recall — flipping a flashcard
 };
 
 // Which synth variant to fall back to if a clip can't load, per slug.
@@ -3773,6 +3774,7 @@ const InSparPlay = ({ onKO, onTimeOut, onYourKO, onEnd, onPause, resumeFrom, opp
 
   const flipCard = () => {
     if (flipped || drag.dragging || flipScale !== 1) return;
+    playSound("recall-flip");
     const half = combo >= 8 ? 140 : 250;
     setFlipScale(0);
     setTimeout(() => {
@@ -5467,6 +5469,7 @@ const InSparPlay = ({ onKO, onTimeOut, onYourKO, onEnd, onPause, resumeFrom, opp
             }}
           >
             <div
+              data-mute-sound
               onClick={() => {
                 if (drag.dragging) return;
                 if (!flipped) flipCard();          // first tap reveals the answer
@@ -9975,7 +9978,7 @@ export default function YourPhrasesFlow() {
       lastSeenDays: Math.max(1, Math.round((Date.now() - (w.lastReviewedAt || Date.now())) / DAY_MS)),
     })),
     ...fiveKWords.map((w, i) => ({
-      id: w.trans, en: w.en, trans: w.trans, region: w.region, example: w.example,
+      id: w.trans, en: w.en, trans: w.trans, roman: w.roman, region: w.region, example: w.example,
       hook: fiveKAssociations[i] && fiveKAssociations[i] !== "(no association)" ? fiveKAssociations[i] : null,
       isNew: true,
     })),
@@ -13758,6 +13761,7 @@ const StartHereCategoryScreen = ({ categories, currentIdx, progressFn, totalDone
               <button
                 key={cat.id}
                 onClick={() => { if (isLocked) return; if (isDone) onEdit(idx); else onPick(idx); }}
+                data-sound="click"
                 disabled={isLocked}
                 className="tactile slide-up text-left rounded-3xl p-3.5 relative flex items-center gap-3"
                 style={{
@@ -15546,6 +15550,7 @@ const FiveKSetupScreen = ({ defaultSize, dailyGoal = 5, dailyDone = 0, dueCount 
         {/* CTA */}
         <div className="slide-up" style={{ animationDelay: "400ms" }} onMouseDown={(e) => e.preventDefault()}>
           <button
+            data-sound="cta"
             onClick={() => onStart(size)}
             className="tactile cta-pulse w-full py-3 rounded-2xl font-display font-bold flex items-center justify-center gap-2"
             style={{
@@ -16104,6 +16109,7 @@ const FiveKWordScreen = ({ word, wordIdx, total, deckCount, onNext, onBack }) =>
           )}
           <button
             onClick={handleContinue}
+            data-sound="cta"
             disabled={flying}
             className="tactile w-full py-3 rounded-2xl font-display font-bold"
             style={{
@@ -16449,12 +16455,15 @@ const FiveKCompleteScreen = ({ wordsAdded, lifetime, lifetimeTarget, onFinish })
   const [counter, setCounter] = useState(0);
   const [coinCounter, setCoinCounter] = useState(0); // 1 coin per word
 
-  // Count up animation
+  // Count up animation — held until the "+N new today" card has slid in (~380ms)
+  // so the number visibly climbs from zero (and the chime can land on the climb).
   useEffect(() => {
     const start = Date.now();
     const duration = 800;
+    const delay = 380;
     const tick = () => {
-      const elapsed = Date.now() - start;
+      const elapsed = Date.now() - start - delay;
+      if (elapsed < 0) { requestAnimationFrame(tick); return; }
       const t = Math.min(1, elapsed / duration);
       const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
       setCounter(Math.round(eased * wordsAdded));
@@ -16466,7 +16475,7 @@ const FiveKCompleteScreen = ({ wordsAdded, lifetime, lifetimeTarget, onFinish })
   // Words-added summary chime — fires as the "new today" counter starts climbing from zero.
   useEffect(() => {
     if (wordsAdded <= 0) return;
-    const t = setTimeout(() => playSound("reps-summary"), 80);
+    const t = setTimeout(() => playSound("reps-summary"), 430);
     return () => clearTimeout(t);
   }, [wordsAdded]);
 
@@ -16474,7 +16483,7 @@ const FiveKCompleteScreen = ({ wordsAdded, lifetime, lifetimeTarget, onFinish })
   useEffect(() => {
     const start = Date.now();
     const duration = 1000;
-    const delay = 1000;
+    const delay = 1320;
     let raf;
     const tick = () => {
       const elapsed = Date.now() - start - delay;
@@ -16491,7 +16500,7 @@ const FiveKCompleteScreen = ({ wordsAdded, lifetime, lifetimeTarget, onFinish })
   // Coins reward sound — fires as the coin counter lands (delay + duration).
   useEffect(() => {
     if (wordsAdded <= 0) return;
-    const t = setTimeout(() => playSound("coins"), 1000);
+    const t = setTimeout(() => playSound("coins"), 1320);
     return () => clearTimeout(t);
   }, [wordsAdded]);
 
@@ -16945,6 +16954,7 @@ const FiveKIntroHooksScreen = ({ onContinue, onBack }) => {
         {/* CTA */}
         <div className="slide-up" style={{ animationDelay: "800ms" }} onMouseDown={(e) => e.preventDefault()}>
           <button
+            data-sound="cta"
             onClick={onContinue}
             className="tactile cta-pulse w-full py-3.5 rounded-2xl font-display font-bold"
             style={{
@@ -18771,6 +18781,7 @@ const PronunciationIntroWhyScreen = ({ onContinue, onBack }) => {
         {/* CTA */}
         <div className="slide-up mt-5" style={{ animationDelay: "520ms" }} onMouseDown={(e) => e.preventDefault()}>
           <button
+            data-sound="cta"
             onClick={onContinue}
             className="tactile cta-pulse w-full py-3.5 rounded-2xl font-display font-bold"
             style={{
@@ -23768,6 +23779,7 @@ const ShadowIntroWhyScreen = ({ onContinue, onBack, pufflingName = "Pip", beltIn
         {/* CTA */}
         <div className="slide-up mt-5" style={{ animationDelay: "620ms" }} onMouseDown={(e) => e.preventDefault()}>
           <button
+            data-sound="cta"
             onClick={onContinue}
             className="tactile cta-pulse w-full py-3.5 rounded-2xl font-display font-bold"
             style={{
@@ -23898,6 +23910,7 @@ const ShadowIntroHowScreen = ({ onContinue, onBack }) => {
         {/* CTA — orange/gold to match the upcoming training's tap-target palette */}
         <div className="slide-up mt-5" style={{ animationDelay: "720ms" }} onMouseDown={(e) => e.preventDefault()}>
           <button
+            data-sound="cta"
             onClick={onContinue}
             className="tactile cta-pulse w-full py-3.5 rounded-2xl font-display font-bold"
             style={{
@@ -24154,6 +24167,11 @@ const ShadowKataScreen = ({ onBack, onComplete, isReturning }) => {
   const finalChoppingRef = useRef(false);
   const audioDoneRef = useRef(false);
   const sessionModeRef = useRef("kata");
+  // Audio robustness refs: retain the live utterance (Chrome GCs local utterances
+  // mid-phrase, which restarts them) and a generation token so a duplicate
+  // onend/onerror can't double-advance and cancel the phrase that's playing.
+  const utterRef = useRef(null);
+  const audioTokenRef = useRef(0);
   useEffect(() => { chosenSpeedRef.current = chosenSpeed; }, [chosenSpeed]);
   useEffect(() => { sessionStartedRef.current = sessionStarted; }, [sessionStarted]);
   useEffect(() => { stackRef.current = stack; }, [stack]);
@@ -24240,19 +24258,28 @@ const ShadowKataScreen = ({ onBack, onComplete, isReturning }) => {
     setPlayIdx(plIdx);
 
     if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
+      const synth = window.speechSynthesis;
+      synth.cancel();
+      const myToken = ++audioTokenRef.current;   // this round's generation id
       const utter = new SpeechSynthesisUtterance(ph.phrase);
       utter.lang = ph.speechLang || "es-MX";
       utter.rate = speed;
-      utter.onend = () => {
+      utterRef.current = utter;                   // retain ref so Chrome can't GC + restart it mid-phrase
+      let finished = false;
+      const finish = () => {
+        // onend AND onerror (and Chrome's occasional double onend) must only
+        // advance ONCE — otherwise a second autoAdvance fires a new playRound
+        // whose cancel() chops the phrase that's currently speaking.
+        if (finished) return; finished = true;
+        if (audioTokenRef.current !== myToken) return; // a newer round already took over
         setAudioPlaying(false);
         if (sessionStartedRef.current) setTimeout(() => autoAdvanceAudio(pIdx, plIdx), 800);
       };
-      utter.onerror = () => {
-        setAudioPlaying(false);
-        if (sessionStartedRef.current) setTimeout(() => autoAdvanceAudio(pIdx, plIdx), 800);
-      };
-      window.speechSynthesis.speak(utter);
+      utter.onend = finish;
+      utter.onerror = finish;
+      // Small gap after cancel() avoids Chrome's cancel→speak race (which can drop
+      // or instantly restart the new utterance). Skip if a newer round started.
+      setTimeout(() => { if (audioTokenRef.current === myToken && window.speechSynthesis) window.speechSynthesis.speak(utter); }, 60);
     } else {
       setTimeout(() => {
         setAudioPlaying(false);
